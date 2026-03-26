@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { PlaybookStore, PlaybookDefinition, PlaybookInfo } from "@polpo-ai/core/playbook-store";
-import { type Dialect, serializeJson, deserializeJson } from "../utils.js";
+import { type Dialect, serializeJson, deserializeJson, extractAffectedRows } from "../utils.js";
 
 type AnyTable = any;
 
@@ -68,8 +68,7 @@ export class DrizzlePlaybookStore implements PlaybookStore {
   async delete(name: string): Promise<boolean> {
     const result = await this.db.delete(this.playbooks)
       .where(eq(this.playbooks.name, name));
-    const affected = result?.rowsAffected ?? result?.rowCount ?? result?.changes ?? 0;
-    return affected > 0;
+    return extractAffectedRows(result) > 0;
   }
 
   // ── Internal ──

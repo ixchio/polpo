@@ -2,6 +2,7 @@ import { eq, and } from "drizzle-orm";
 import type { VaultStore } from "@polpo-ai/core/vault-store";
 import type { VaultEntry } from "@polpo-ai/core/types";
 import { resolveKey, encryptJson, decryptJson } from "@polpo-ai/vault-crypto";
+import { extractAffectedRows } from "../utils.js";
 
 type AnyTable = any;
 
@@ -88,9 +89,7 @@ export class DrizzleVaultStore implements VaultStore {
   async remove(agent: string, service: string): Promise<boolean> {
     const result = await this.db.delete(this.vault)
       .where(and(eq(this.vault.agent, agent), eq(this.vault.service, service)));
-    // Drizzle returns { rowsAffected } for SQLite, { rowCount } for PG
-    const affected = result?.rowsAffected ?? result?.rowCount ?? result?.changes ?? 0;
-    return affected > 0;
+    return extractAffectedRows(result) > 0;
   }
 
   async list(agent: string): Promise<Array<{

@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { ApprovalStore } from "@polpo-ai/core/approval-store";
 import type { ApprovalRequest, ApprovalStatus } from "@polpo-ai/core/types";
-import { type Dialect, serializeJson, deserializeJson } from "../utils.js";
+import { type Dialect, serializeJson, deserializeJson, extractAffectedRows } from "../utils.js";
 
 type AnyTable = any;
 
@@ -77,7 +77,7 @@ export class DrizzleApprovalStore implements ApprovalStore {
   async delete(id: string): Promise<boolean> {
     const result = await this.db.delete(this.approvals)
       .where(eq(this.approvals.id, id));
-    return (result?.rowCount ?? result?.changes ?? 0) > 0;
+    return extractAffectedRows(result) > 0;
   }
 
   async close(): Promise<void> {}
