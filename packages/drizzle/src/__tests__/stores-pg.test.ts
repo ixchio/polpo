@@ -69,12 +69,14 @@ describe.skipIf(!canConnect)("PostgreSQL Drizzle stores", () => {
     await pgClient.end();
   });
 
-  /** Truncate all tables between tests for full isolation. */
+  /** Truncate all tables and recreate stores between tests for full isolation. */
   beforeEach(async () => {
     // TRUNCATE CASCADE handles foreign key dependencies
     for (const table of ALL_TABLES) {
       await db.execute(sql.raw(`TRUNCATE TABLE "${table}" CASCADE`));
     }
+    // Recreate stores to reset in-memory state (e.g. LogStore.currentSessionId)
+    stores = createPgStores(db);
   });
 
   // ═══════════════════════════════════════════════════════════════════════
