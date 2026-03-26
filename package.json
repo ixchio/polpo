@@ -1,0 +1,109 @@
+{
+  "name": "polpo-ai",
+  "version": "0.3.13",
+  "description": "The open runtime for agentic development",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    },
+    "./assessment": {
+      "types": "./dist/assessment/index.d.ts",
+      "import": "./dist/assessment/index.js"
+    }
+  },
+  "bin": {
+    "polpo-ai": "dist/cli/index.js",
+    "polpo": "dist/cli/index.js"
+  },
+  "files": [
+    "dist/",
+    "!dist/__tests__/",
+    "playbooks/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "pnpm --filter @polpo-ai/core build && pnpm --filter @polpo-ai/vault-crypto build && pnpm --filter @polpo-ai/drizzle build && tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/cli/index.js",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "pnpm --filter @polpo-ai/core build && pnpm --filter @polpo-ai/drizzle build && ./node_modules/.bin/tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "orchestration",
+    "coding-agents",
+    "multi-agent",
+    "baas",
+    "runtime"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lumea-labs/polpo.git"
+  },
+  "homepage": "https://polpo.sh",
+  "bugs": {
+    "url": "https://github.com/lumea-labs/polpo/issues"
+  },
+  "author": "Lumea Labs",
+  "packageManager": "pnpm@10.29.3",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.9",
+    "@hono/zod-openapi": "^1.2.2",
+    "@mariozechner/pi-agent-core": "^0.62.0",
+    "@mariozechner/pi-ai": "^0.62.0",
+    "@polpo-ai/core": "^0.3.9",
+    "@polpo-ai/server": "^0.2.14",
+    "@polpo-ai/vault-crypto": "^0.2.4",
+    "@sinclair/typebox": "^0.34.48",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "execa": "^9.6.1",
+    "hono": "^4.11.9",
+    "nanoid": "^5.1.2",
+    "yaml": "^2.7.0",
+    "zod": "^4.3.6"
+  },
+  "optionalDependencies": {
+    "@polpo-ai/drizzle": "^0.2.10",
+    "better-sqlite3": "^12.6.2",
+    "drizzle-orm": "^0.44.0",
+    "nodemailer": "^8.0.1",
+    "playwright-core": "^1.52.0",
+    "postgres": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.12.0",
+    "@types/nodemailer": "^7.0.10",
+    "@vitest/coverage-v8": "^3.2.4",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
+  }
+}

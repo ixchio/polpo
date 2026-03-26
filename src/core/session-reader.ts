@@ -1,0 +1,181 @@
+import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { join, basename } from "node:path";
+import { homedir } from "node:os";
+
+export interface SessionMessage {
+  type: "user" | "assistant" | "system" | string;
+  timestamp?: string;
+  sessionId?: string;
+  message?: {
+    role: string;
+    content: string | Array<{ type: string; text?: string; name?: string; input?: Record<string, unknown> }>;
+  };
+}
+
+export interface SessionSummary {
+  sessionId: string;
+  transcriptPath: string;
+  messageCount: number;
+  toolCalls: string[];
+  filesCreated: string[];
+  filesEdited: string[];
+  lastMessage: string;
+  todos: string[];
+  errors: string[];
+}
+
+/**
+ * Find the JSONL transcript file for a given SDK session ID.
+ * Sessions are stored in ~/.claude/projects/<encoded-cwd>/<sessionId>/<sessionId>.jsonl
+ */
+export function findTranscriptPath(sessionId: string, cwd: string): string | null {
+  // Encode CWD to project path format: /home/user/foo → -home-user-foo
+  const encoded = cwd.replace(/\//g, "-").replace(/^-/, "-");
+  const claudeDir = join(homedir(), ".claude", "projects");
+
+  // Try encoded path
+  const candidates = [
+    join(claudeDir, encoded, sessionId, `${sessionId}.jsonl`),
+  ];
+
+  // Also try listing project dirs in case encoding differs
+  if (existsSync(claudeDir)) {
+    try {
+      const dirs = readdirSync(claudeDir);
+      for (const d of dirs) {
+        const candidate = join(claudeDir, d, sessionId, `${sessionId}.jsonl`);
+        if (!candidates.includes(candidate)) candidates.push(candidate);
+      }
+    } catch { /* unreadable projects dir */ }
+  }
+
+  for (const path of candidates) {
+    if (existsSync(path)) return path;
+  }
+  return null;
+}
+
+/**
+ * Read and summarize a session transcript from an absolute path.
+ * Extracts tool calls, files touched, TODOs, errors, and last message.
+ * Used by readSessionSummary() for Polpo-spawned sessions.
+ */
+export function readSessionSummaryFromPath(transcriptPath: string): SessionSummary | null {
+  // Derive sessionId from filename: /path/to/<sessionId>.jsonl → sessionId
+  const sessionId = basename(transcriptPath, ".jsonl");
+
+  const toolCalls: string[] = [];
+  const filesCreated: string[] = [];
+  const filesEdited: string[] = [];
+  const todos: string[] = [];
+  const errors: string[] = [];
+  let lastMessage = "";
+  let messageCount = 0;
+
+  try {
+    const raw = readFileSync(transcriptPath, "utf-8");
+    const lines = raw.split("\n").filter(l => l.trim());
+
+    for (const line of lines) {
+      let msg: Record<string, unknown>;
+      try { msg = JSON.parse(line) as Record<string, unknown>; } catch { continue; /* skip malformed line */ }
+      messageCount++;
+
+      if (msg.type === "assistant" && (msg.message as Record<string, unknown> | undefined)?.content) {
+        const msgObj = msg.message as Record<string, unknown>;
+        const content = msgObj.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block.type === "text" && block.text) {
+              lastMessage = block.text.slice(0, 300);
+
+              // Extract TODO items
+              const todoMatches = block.text.match(/(?:TODO|FIXME|HACK|XXX)[:：\s].*$/gmi);
+              if (todoMatches) {
+                for (const t of todoMatches) todos.push(t.trim());
+              }
+            }
+            if (block.type === "tool_use") {
+              const toolName = block.name;
+              const input = block.input as Record<string, unknown> | undefined;
+              toolCalls.push(toolName);
+
+              const filePath = input?.file_path ?? input?.path ?? input?.filePath;
+              if (filePath && typeof filePath === "string") {
+                if (toolName === "Write") {
+                  if (!filesCreated.includes(filePath)) filesCreated.push(filePath);
+                } else if (toolName === "Edit") {
+                  if (!filesEdited.includes(filePath)) filesEdited.push(filePath);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Capture errors from result messages
+      if (msg.type === "result") {
+        const result = msg as Record<string, unknown>;
+        if (result.subtype !== "success" && Array.isArray(result.errors)) {
+          for (const e of result.errors) errors.push(String(e).slice(0, 200));
+        }
+      }
+    }
+  } catch { return null; /* unreadable transcript */ }
+
+  return {
+    sessionId,
+    transcriptPath,
+    messageCount,
+    toolCalls,
+    filesCreated,
+    filesEdited,
+    lastMessage,
+    todos,
+    errors,
+  };
+}
+
+/**
+ * Read and summarize a session transcript by session ID and working directory.
+ * Delegates to readSessionSummaryFromPath after resolving the transcript path.
+ */
+export function readSessionSummary(sessionId: string, cwd: string): SessionSummary | null {
+  const transcriptPath = findTranscriptPath(sessionId, cwd);
+  if (!transcriptPath) return null;
+  return readSessionSummaryFromPath(transcriptPath);
+}
+
+/**
+ * Get the last N assistant messages from a session transcript.
+ */
+export function getRecentMessages(sessionId: string, cwd: string, limit = 5): string[] {
+  const transcriptPath = findTranscriptPath(sessionId, cwd);
+  if (!transcriptPath) return [];
+
+  const messages: string[] = [];
+
+  try {
+    const raw = readFileSync(transcriptPath, "utf-8");
+    const lines = raw.split("\n").filter(l => l.trim());
+
+    for (const line of lines) {
+      let msg: Record<string, unknown>;
+      try { msg = JSON.parse(line) as Record<string, unknown>; } catch { continue; /* skip malformed line */ }
+
+      if (msg.type === "assistant" && (msg.message as Record<string, unknown> | undefined)?.content) {
+        const msgObj = msg.message as Record<string, unknown>;
+        const content = msgObj.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block.type === "text" && block.text?.trim()) {
+              messages.push(block.text.slice(0, 500));
+            }
+          }
+        }
+      }
+    }
+  } catch { return []; /* unreadable transcript */ }
+
+  return messages.slice(-limit);
+}

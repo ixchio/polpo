@@ -1,0 +1,24 @@
+# Default owners for the entire repository
+* @lumea-labs/maintainers
+
+# Core framework
+/src/core/ @lumea-labs/maintainers
+/src/adapters/ @lumea-labs/maintainers
+/packages/core/ @lumea-labs/maintainers
+
+# Storage
+/packages/drizzle/ @lumea-labs/maintainers
+/src/stores/ @lumea-labs/maintainers
+
+# Server and API
+/src/server/ @lumea-labs/maintainers
+/packages/server/ @lumea-labs/maintainers
+
+# SDKs
+/packages/client-sdk/ @lumea-labs/maintainers
+/packages/react-sdk/ @lumea-labs/maintainers
+
+# CI/CD and project config
+/.github/ @lumea-labs/maintainers
+/package.json @lumea-labs/maintainers
+/tsconfig.json @lumea-labs/maintainers

@@ -1,0 +1,83 @@
+export * from "./types.js";
+export * from "./events.js";
+export { VALID_TRANSITIONS, isValidTransition, assertValidTransition } from "./state-machine.js";
+export type { TaskStore } from "./task-store.js";
+export type { AgentHandle } from "./adapter.js";
+export type { RunStore, RunRecord, RunStatus } from "./run-store.js";
+export type { ConfigStore } from "./config-store.js";
+export type { MemoryStore } from "./memory-store.js";
+export type { LogStore, LogEntry, SessionInfo } from "./log-store.js";
+export type { SessionStore, Session, Message, MessageRole, ToolCallInfo, ToolCallState } from "./session-store.js";
+export type { ApprovalStore } from "./approval-store.js";
+export { Orchestrator, buildRetryPrompt } from "./orchestrator.js";
+export type { OrchestratorOptions, AssessFn } from "./orchestrator.js";
+export { parseConfig, loadPolpoConfig, savePolpoConfig, generatePolpoConfigDefault, validateAgents } from "./config.js";
+export { readSessionSummary, readSessionSummaryFromPath, getRecentMessages, findTranscriptPath } from "./session-reader.js";
+export { looksLikeQuestion, classifyAsQuestion } from "./question-detector.js";
+export { analyzeBlockedTasks, resolveDeadlock, isResolving } from "./deadlock-resolver.js";
+// Hooks
+export { HookRegistry } from "./hooks.js";
+export type {
+  LifecycleHook,
+  HookPhase,
+  HookContext,
+  HookHandler,
+  HookRegistration,
+  HookPayloads,
+  BeforeHookResult,
+} from "./hooks.js";
+
+// Approval
+export { ApprovalManager } from "./approval-manager.js";
+
+// Escalation
+export { EscalationManager } from "./escalation-manager.js";
+
+// Quality Layer
+export { SLAMonitor } from "../quality/sla-monitor.js";
+export { QualityController } from "../quality/quality-controller.js";
+
+// Scheduling
+export { Scheduler } from "../scheduling/scheduler.js";
+export { parseCron, matchesCron, nextCronOccurrence, isCronExpression } from "../scheduling/cron.js";
+
+// Task Watchers
+export { TaskWatcherManager } from "./task-watcher.js";
+
+// Playbooks
+export { discoverPlaybooks, loadPlaybook, validateParams, instantiatePlaybook, validatePlaybookDefinition, savePlaybook, deletePlaybook } from "./playbook.js";
+export type { PlaybookParameter, PlaybookDefinition, PlaybookInfo, ValidationResult } from "./playbook.js";
+export type { PlaybookStore } from "./playbook-store.js";
+
+// Backward-compat aliases (deprecated)
+export { discoverTemplates, loadTemplate, instantiateTemplate, validateTemplateDefinition, saveTemplate, deleteTemplate } from "./playbook.js";
+export type { TemplateParameter, TemplateDefinition, TemplateInfo } from "./playbook.js";
+
+// Ink Registry
+export {
+  parseInkSource,
+  hashContent,
+  discoverInkPackages,
+  validateInkPlaybook,
+  validateInkAgent,
+  validateInkCompany,
+  readInkLock,
+  writeInkLock,
+  upsertInkLockEntry,
+  removeInkLockEntry,
+  isInkSourceInstalled,
+  getInkLockEntry,
+  stripInkMetadata,
+} from "./ink.js";
+export type {
+  InkPackageType,
+  InkSource,
+  InkPackage,
+  InkPackageMetadata,
+  InkVerdictLevel,
+  InkVerdict,
+  InkLockEntry,
+  InkLockPackage,
+  InkLockFile,
+  InkValidationResult,
+} from "./ink.js";

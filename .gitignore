@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build output
+dist/
+ui/dev-dist/
+coverage/
+
+# Polpo runtime data
+.polpo/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.test
+.env.*.local
+ui/.env
+
+# Agent/coding tool config directories (local per-user)
+.adal/
+.agent/
+.agents/
+.augment/
+.claude/
+.cline/
+.codebuddy/
+.codex/
+.commandcode/
+.continue/
+.crush/
+.cursor/
+.factory/
+.gemini/
+.goose/
+.iflow/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.mcpjam/
+.mux/
+.neovate/
+.openclaude/
+.opencode/
+.openhands/
+.pi/
+.playwright-mcp/
+.pochi/
+.qoder/
+.qwen/
+.roo/
+.trae/
+.vibe/
+.windsurf/
+.zencoder/
+docs-backup/

@@ -1,0 +1,59 @@
+{
+  "name": "@polpo-ai/sdk",
+  "version": "0.3.3",
+  "description": "Polpo SDK — typed HTTP client, SSE streaming, and reactive store for AI agent orchestration",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js"
+    },
+    "./store": {
+      "types": "./dist/store/index.d.ts",
+      "import": "./dist/store/index.js"
+    }
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "files": ["dist", "README.md"],
+  "license": "MIT",
+  "keywords": [
+    "polpo",
+    "ai-agents",
+    "orchestration",
+    "typescript",
+    "client",
+    "sdk",
+    "sse",
+    "real-time"
+  ],
+  "author": "OpenPolpo Contributors",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lumea-labs/polpo.git",
+    "directory": "packages/client-sdk"
+  },
+  "homepage": "https://github.com/lumea-labs/polpo/tree/main/packages/client-sdk",
+  "bugs": {
+    "url": "https://github.com/lumea-labs/polpo/issues"
+  }
+}

@@ -1,0 +1,239 @@
+{
+  "name": "@polpo-ai/core",
+  "version": "0.3.11",
+  "description": "Pure business logic, types, schemas, and store interfaces for the Polpo AI agent orchestration platform",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    },
+    "./schemas": {
+      "types": "./dist/schemas.d.ts",
+      "import": "./dist/schemas.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "import": "./dist/events.js"
+    },
+    "./state-machine": {
+      "types": "./dist/state-machine.d.ts",
+      "import": "./dist/state-machine.js"
+    },
+    "./hooks": {
+      "types": "./dist/hooks.d.ts",
+      "import": "./dist/hooks.js"
+    },
+    "./task-store": {
+      "types": "./dist/task-store.d.ts",
+      "import": "./dist/task-store.js"
+    },
+    "./run-store": {
+      "types": "./dist/run-store.d.ts",
+      "import": "./dist/run-store.js"
+    },
+    "./memory-store": {
+      "types": "./dist/memory-store.d.ts",
+      "import": "./dist/memory-store.js"
+    },
+    "./approval-store": {
+      "types": "./dist/approval-store.d.ts",
+      "import": "./dist/approval-store.js"
+    },
+    "./log-store": {
+      "types": "./dist/log-store.d.ts",
+      "import": "./dist/log-store.js"
+    },
+    "./session-store": {
+      "types": "./dist/session-store.d.ts",
+      "import": "./dist/session-store.js"
+    },
+    "./notification-store": {
+      "types": "./dist/notification-store.d.ts",
+      "import": "./dist/notification-store.js"
+    },
+    "./config-store": {
+      "types": "./dist/config-store.d.ts",
+      "import": "./dist/config-store.js"
+    },
+    "./peer-store": {
+      "types": "./dist/peer-store.d.ts",
+      "import": "./dist/peer-store.js"
+    },
+    "./team-store": {
+      "types": "./dist/team-store.d.ts",
+      "import": "./dist/team-store.js"
+    },
+    "./agent-store": {
+      "types": "./dist/agent-store.d.ts",
+      "import": "./dist/agent-store.js"
+    },
+    "./vault-store": {
+      "types": "./dist/vault-store.d.ts",
+      "import": "./dist/vault-store.js"
+    },
+    "./playbook-store": {
+      "types": "./dist/playbook-store.d.ts",
+      "import": "./dist/playbook-store.js"
+    },
+    "./attachment-store": {
+      "types": "./dist/attachment-store.d.ts",
+      "import": "./dist/attachment-store.js"
+    },
+    "./adapter": {
+      "types": "./dist/adapter.d.ts",
+      "import": "./dist/adapter.js"
+    },
+    "./event-bus": {
+      "types": "./dist/event-bus.d.ts",
+      "import": "./dist/event-bus.js"
+    },
+    "./checkpoint-store": {
+      "types": "./dist/checkpoint-store.d.ts",
+      "import": "./dist/checkpoint-store.js"
+    },
+    "./delay-store": {
+      "types": "./dist/delay-store.d.ts",
+      "import": "./dist/delay-store.js"
+    },
+    "./notification-router-port": {
+      "types": "./dist/notification-router-port.d.ts",
+      "import": "./dist/notification-router-port.js"
+    },
+    "./cron": {
+      "types": "./dist/cron.d.ts",
+      "import": "./dist/cron.js"
+    },
+    "./filesystem": {
+      "types": "./dist/filesystem.d.ts",
+      "import": "./dist/filesystem.js"
+    },
+    "./shell": {
+      "types": "./dist/shell.d.ts",
+      "import": "./dist/shell.js"
+    },
+    "./spawner": {
+      "types": "./dist/spawner.d.ts",
+      "import": "./dist/spawner.js"
+    },
+    "./orchestrator-context": {
+      "types": "./dist/orchestrator-context.d.ts",
+      "import": "./dist/orchestrator-context.js"
+    },
+    "./task-manager": {
+      "types": "./dist/task-manager.d.ts",
+      "import": "./dist/task-manager.js"
+    },
+    "./agent-manager": {
+      "types": "./dist/agent-manager.d.ts",
+      "import": "./dist/agent-manager.js"
+    },
+    "./approval-manager": {
+      "types": "./dist/approval-manager.d.ts",
+      "import": "./dist/approval-manager.js"
+    },
+    "./escalation-manager": {
+      "types": "./dist/escalation-manager.d.ts",
+      "import": "./dist/escalation-manager.js"
+    },
+    "./task-watcher": {
+      "types": "./dist/task-watcher.d.ts",
+      "import": "./dist/task-watcher.js"
+    },
+    "./quality-controller": {
+      "types": "./dist/quality-controller.d.ts",
+      "import": "./dist/quality-controller.js"
+    },
+    "./sla-monitor": {
+      "types": "./dist/sla-monitor.d.ts",
+      "import": "./dist/sla-monitor.js"
+    },
+    "./scheduler": {
+      "types": "./dist/scheduler.d.ts",
+      "import": "./dist/scheduler.js"
+    },
+    "./mission-executor": {
+      "types": "./dist/mission-executor.d.ts",
+      "import": "./dist/mission-executor.js"
+    },
+    "./task-runner": {
+      "types": "./dist/task-runner.d.ts",
+      "import": "./dist/task-runner.js"
+    },
+    "./assessment-orchestrator": {
+      "types": "./dist/assessment-orchestrator.d.ts",
+      "import": "./dist/assessment-orchestrator.js"
+    },
+    "./assessment-prompts": {
+      "types": "./dist/assessment-prompts.d.ts",
+      "import": "./dist/assessment-prompts.js"
+    },
+    "./question-detector": {
+      "types": "./dist/question-detector.d.ts",
+      "import": "./dist/question-detector.js"
+    },
+    "./assessor": {
+      "types": "./dist/assessor.d.ts",
+      "import": "./dist/assessor.js"
+    },
+    "./assessment-scoring": {
+      "types": "./dist/assessment-scoring.d.ts",
+      "import": "./dist/assessment-scoring.js"
+    },
+    "./assessment-schemas": {
+      "types": "./dist/assessment-schemas.d.ts",
+      "import": "./dist/assessment-schemas.js"
+    },
+    "./retry": {
+      "types": "./dist/retry.d.ts",
+      "import": "./dist/retry.js"
+    }
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "tsc"
+  },
+  "dependencies": {
+    "nanoid": "^5.1.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "polpo",
+    "ai-agents",
+    "orchestration",
+    "types",
+    "core"
+  ],
+  "author": "OpenPolpo Contributors",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lumea-labs/polpo.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/lumea-labs/polpo/tree/main/packages/core",
+  "bugs": {
+    "url": "https://github.com/lumea-labs/polpo/issues"
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "name": "@polpo-ai/react",
+  "version": "0.2.5",
+  "description": "React SDK for OpenPolpo — hooks with real-time SSE updates, built on @polpo-ai/sdk",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./hooks/*": {
+      "types": "./dist/hooks/*.d.ts",
+      "import": "./dist/hooks/*.js"
+    }
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "prepublishOnly": "tsc"
+  },
+  "dependencies": {
+    "@polpo-ai/sdk": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.2.3",
+    "jsdom": "^29.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.2.4",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "polpo",
+    "ai-agents",
+    "orchestration",
+    "react",
+    "hooks",
+    "sse",
+    "real-time"
+  ],
+  "author": "OpenPolpo Contributors",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lumea-labs/polpo.git",
+    "directory": "packages/react-sdk"
+  },
+  "homepage": "https://github.com/lumea-labs/polpo/tree/main/packages/react-sdk",
+  "bugs": {
+    "url": "https://github.com/lumea-labs/polpo/issues"
+  }
+}
