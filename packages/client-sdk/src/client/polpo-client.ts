@@ -927,12 +927,13 @@ export class PolpoClient {
   }
 
   listFiles(root: string, path?: string): Promise<{ path: string; entries: FileEntry[] }> {
-    const targetPath = path ?? root;
-    return this.get<{ path: string; entries: FileEntry[] }>(`/files/list?path=${encodeURIComponent(targetPath)}`);
+    const params = new URLSearchParams({ root });
+    if (path) params.set("path", path);
+    return this.get<{ path: string; entries: FileEntry[] }>(`/files/list?${params.toString()}`);
   }
 
   previewFile(root: string, path: string, maxLines?: number): Promise<FilePreview> {
-    const params = new URLSearchParams({ path });
+    const params = new URLSearchParams({ root, path });
     if (maxLines !== undefined) params.set("maxLines", String(maxLines));
     return this.get<FilePreview>(`/files/preview?${params.toString()}`);
   }
