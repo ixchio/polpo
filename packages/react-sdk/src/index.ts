@@ -139,6 +139,7 @@ export type {
   ChatCompletionMessage,
   TextContentPart,
   ImageUrlContentPart,
+  FileContentPart,
   ContentPart,
   ChatCompletionRequest,
   ChatCompletionResponse,

@@ -1001,7 +1001,7 @@ export interface ResumeMissionResult {
 
 export interface Attachment {
   id: string;
-  sessionId: string;
+  sessionId?: string;
   messageId?: string;
   filename: string;
   mimeType: string;
@@ -1219,11 +1219,18 @@ export interface ImageUrlContentPart {
   };
 }
 
-export type ContentPart = TextContentPart | ImageUrlContentPart;
+/** A file content part — references an uploaded attachment by ID. */
+export interface FileContentPart {
+  type: "file";
+  /** Attachment ID from a previous upload. */
+  file_id: string;
+}
+
+export type ContentPart = TextContentPart | ImageUrlContentPart | FileContentPart;
 
 export interface ChatCompletionMessage {
   role: "system" | "user" | "assistant";
-  /** Plain string or multimodal content parts (text + images). */
+  /** Plain string or multimodal content parts (text, images, files). */
   content: string | ContentPart[];
 }
 

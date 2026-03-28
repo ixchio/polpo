@@ -861,12 +861,27 @@ export class PolpoClient {
   // ── Attachments ─────────────────────────────────────────
 
   /**
-   * Upload a file attachment for a chat session.
+   * Upload a file attachment. sessionId is optional — files can be uploaded
+   * before a session exists and referenced later via { type: "file", file_id } content parts.
    * Uses multipart/form-data — does NOT go through the JSON `request()` helper.
    */
-  async uploadAttachment(sessionId: string, file: File | Blob, filename: string): Promise<Attachment> {
+  async uploadAttachment(sessionIdOrFile: string | File | Blob, fileOrFilename?: File | Blob | string, maybeFilename?: string): Promise<Attachment> {
+    // Support both signatures: (sessionId, file, filename) and (file, filename)
+    let sessionId: string | undefined;
+    let file: File | Blob;
+    let filename: string;
+    if (typeof sessionIdOrFile === "string" && fileOrFilename instanceof Blob) {
+      sessionId = sessionIdOrFile;
+      file = fileOrFilename;
+      filename = maybeFilename ?? "upload";
+    } else if (sessionIdOrFile instanceof Blob) {
+      file = sessionIdOrFile;
+      filename = (typeof fileOrFilename === "string" ? fileOrFilename : undefined) ?? "upload";
+    } else {
+      throw new Error("Invalid arguments: expected (file, filename) or (sessionId, file, filename)");
+    }
     const form = new FormData();
-    form.append("sessionId", sessionId);
+    if (sessionId) form.append("sessionId", sessionId);
     form.append("file", file, filename);
 
     const headers: Record<string, string> = {};

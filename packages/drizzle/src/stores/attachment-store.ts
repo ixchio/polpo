@@ -61,4 +61,10 @@ export class DrizzleAttachmentStore implements AttachmentStore {
       .where(eq(this.attachments.sessionId, sessionId));
     return extractAffectedRows(result);
   }
+
+  async updateSessionId(id: string, sessionId: string): Promise<void> {
+    await this.db.update(this.attachments)
+      .set({ sessionId })
+      .where(eq(this.attachments.id, id));
+  }
 }

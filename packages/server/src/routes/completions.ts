@@ -66,7 +66,7 @@ function redactVaultToolCalls(toolCalls: any[]): any[] {
 
 // ── Zod Schemas ────────────────────────────────────────────────────────
 
-/** OpenAI-compatible content part (text or image_url). */
+/** OpenAI-compatible content part (text, image_url, or file reference). */
 const contentPartSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string() }),
   z.object({
@@ -75,6 +75,10 @@ const contentPartSchema = z.discriminatedUnion("type", [
       url: z.string().openapi({ description: "Data URL (data:image/…;base64,…) or HTTPS URL" }),
       detail: z.enum(["auto", "low", "high"]).optional(),
     }),
+  }),
+  z.object({
+    type: z.literal("file"),
+    file_id: z.string().openapi({ description: "Attachment ID from a previous upload" }),
   }),
 ]);
 
@@ -196,6 +200,42 @@ function extractText(content: z.infer<typeof messageSchema>["content"]): string 
     .join("\n");
 }
 
+/** Resolve file content parts → text references. Called before toPiContent to inject attachment paths. */
+async function resolveFileContentParts(
+  content: z.infer<typeof messageSchema>["content"],
+  attachmentStore: any,
+  sessionId: string | null,
+): Promise<z.infer<typeof messageSchema>["content"]> {
+  if (typeof content === "string" || !content.some((p) => p.type === "file")) return content;
+
+  const resolved: z.infer<typeof contentPartSchema>[] = [];
+  for (const part of content) {
+    if (part.type !== "file") {
+      resolved.push(part);
+      continue;
+    }
+    // Resolve file_id → attachment metadata
+    const attachment = await attachmentStore?.get?.(part.file_id);
+    if (!attachment) {
+      resolved.push({ type: "text", text: `[File not found: ${part.file_id}]` });
+      continue;
+    }
+    // Bind loose file to session if needed
+    if (!attachment.sessionId && sessionId && attachmentStore.updateSessionId) {
+      await attachmentStore.updateSessionId(part.file_id, sessionId);
+    }
+    // Inject text reference — agent will use read_attachment tool to read the actual file
+    const sizeStr = attachment.size > 1024 * 1024
+      ? `${(attachment.size / (1024 * 1024)).toFixed(1)}MB`
+      : `${(attachment.size / 1024).toFixed(1)}KB`;
+    resolved.push({
+      type: "text",
+      text: `[Attached file: ${attachment.filename} (${attachment.mimeType}, ${sizeStr}) — path: ${attachment.path}]`,
+    });
+  }
+  return resolved;
+}
+
 /** Convert OpenAI-format content to pi-ai UserMessage content. */
 function toPiContent(content: z.infer<typeof messageSchema>["content"]): string | ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[] {
   if (typeof content === "string") return content;
@@ -212,19 +252,24 @@ function toPiContent(content: z.infer<typeof messageSchema>["content"]): string 
     if (p.type === "text") {
       return { type: "text" as const, text: p.text };
     }
-    // image_url → ImageContent
-    const url = p.image_url.url;
-    // data:image/png;base64,... → extract mimeType and base64 data
-    const match = url.match(/^data:([^;]+);base64,(.+)$/);
-    if (match) {
-      return { type: "image" as const, data: match[2], mimeType: match[1] };
+    if (p.type === "image_url") {
+      const url = p.image_url.url;
+      const match = url.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        return { type: "image" as const, data: match[2], mimeType: match[1] };
+      }
+      return { type: "image" as const, data: url, mimeType: "image/png" };
     }
-    // HTTPS URL — pass as-is (pi-ai may or may not support external URLs depending on provider)
-    return { type: "image" as const, data: url, mimeType: "image/png" };
-  });
+    // file parts should have been resolved by resolveFileContentParts already
+    return { type: "text" as const, text: "" };
+  }).filter((p) => p.type !== "text" || p.text !== "");
 }
 
-function convertMessages(messages: z.infer<typeof messageSchema>[]): { piMessages: any[]; extraSystemParts: string[] } {
+async function convertMessages(
+  messages: z.infer<typeof messageSchema>[],
+  attachmentStore?: any,
+  sessionId?: string | null,
+): Promise<{ piMessages: any[]; extraSystemParts: string[] }> {
   const piMessages: any[] = [];
   const extraSystemParts: string[] = [];
 
@@ -232,7 +277,9 @@ function convertMessages(messages: z.infer<typeof messageSchema>[]): { piMessage
     if (msg.role === "system") {
       extraSystemParts.push(extractText(msg.content));
     } else if (msg.role === "user") {
-      piMessages.push({ role: "user", content: toPiContent(msg.content), timestamp: Date.now() });
+      // Resolve file content parts → text references (only in the pi-ai message, not persisted)
+      const resolvedContent = await resolveFileContentParts(msg.content, attachmentStore, sessionId ?? null);
+      piMessages.push({ role: "user", content: toPiContent(resolvedContent), timestamp: Date.now() });
     } else if (msg.role === "assistant") {
       piMessages.push({
         role: "user",
@@ -323,6 +370,7 @@ export interface CompletionRouteDeps {
   getConfig: () => any;
   getMemoryStore: () => any;
   getSessionStore: () => any;
+  getAttachmentStore: () => any;
   getStore: () => any;
   emit: (event: string, data: any) => void;
   /** Resolve agent model + streaming options. */
@@ -374,7 +422,9 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
     let effectiveToolExecutor: (name: string, args: Record<string, unknown>) => Promise<string>;
     let isInteractiveFn: ((name: string) => boolean) | undefined;
 
-    const { piMessages, extraSystemParts } = convertMessages(body.messages);
+    const attachmentStore = deps.getAttachmentStore();
+    const rawSessionId = c.req.header("x-session-id") ?? null;
+    const { piMessages, extraSystemParts } = await convertMessages(body.messages, attachmentStore, rawSessionId);
 
     if (agentMode) {
       // ── Agent-direct mode ──

@@ -58,4 +58,13 @@ export class FileAttachmentStore implements AttachmentStore {
     if (removed > 0) this.writeAll(kept);
     return removed;
   }
+
+  async updateSessionId(id: string, sessionId: string): Promise<void> {
+    const all = this.readAll();
+    const att = all.find(a => a.id === id);
+    if (att) {
+      att.sessionId = sessionId;
+      this.writeAll(all);
+    }
+  }
 }

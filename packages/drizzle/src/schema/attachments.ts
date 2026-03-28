@@ -5,7 +5,7 @@ import { pgTable, text as pgText, integer as pgInteger, index as pgIndex } from 
 
 export const attachmentsSqlite = sqliteTable("attachments", {
   id: text("id").primaryKey(),
-  sessionId: text("session_id").notNull(),
+  sessionId: text("session_id"),
   messageId: text("message_id"),
   filename: text("filename").notNull(),
   mimeType: text("mime_type").notNull(),
@@ -20,7 +20,7 @@ export const attachmentsSqlite = sqliteTable("attachments", {
 
 export const attachmentsPg = pgTable("attachments", {
   id: pgText("id").primaryKey(),
-  sessionId: pgText("session_id").notNull(),
+  sessionId: pgText("session_id"),
   messageId: pgText("message_id"),
   filename: pgText("filename").notNull(),
   mimeType: pgText("mime_type").notNull(),

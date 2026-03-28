@@ -128,11 +128,8 @@ export function attachmentRoutes(getDeps: () => AttachmentDeps) {
     const { attachmentStore, fs, workDir } = getDeps();
     const body = await c.req.parseBody({ all: true });
 
-    const sessionId = body.sessionId as string;
+    const sessionId = (body.sessionId as string) || undefined;
     const messageId = (body.messageId as string) || undefined;
-    if (!sessionId) {
-      return c.json({ ok: false, error: "sessionId is required" }, 400);
-    }
 
     const files = Array.isArray(body.file) ? body.file : body.file ? [body.file] : [];
     if (files.length === 0) {
@@ -146,11 +143,13 @@ export function attachmentRoutes(getDeps: () => AttachmentDeps) {
 
       const id = nanoid(12);
       const filename = file.name || `upload-${id}`;
-      const relPath = `workspace/attachments/${sessionId}/${filename}`;
+      // If no session, store under a shared "uploads" dir; otherwise under session dir
+      const subDir = sessionId ?? "uploads";
+      const relPath = `workspace/attachments/${subDir}/${filename}`;
       const absPath = join(workDir, relPath);
 
       // Ensure directory exists
-      const dir = join(workDir, "workspace", "attachments", sessionId);
+      const dir = join(workDir, "workspace", "attachments", subDir);
       if (!(await fs.exists(dir))) {
         await fs.mkdir(dir);
       }

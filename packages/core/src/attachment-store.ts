@@ -1,5 +1,10 @@
 /**
- * Attachment metadata store — tracks files attached to chat sessions.
+ * Attachment metadata store — tracks uploaded files.
+ *
+ * Files can be uploaded without a session (OpenAI-compatible flow:
+ * upload first, then reference in a message content part).
+ * The sessionId is set later when the file is first referenced
+ * in a completions request.
  *
  * The actual file content is managed by the FileSystem abstraction.
  * This store only persists metadata (filename, mimeType, size, path).
@@ -7,7 +12,8 @@
 
 export interface Attachment {
   id: string;
-  sessionId: string;
+  /** Session this file belongs to. Optional — files can be uploaded before a session exists. */
+  sessionId?: string;
   /** Message this attachment belongs to (optional — set when attached to a specific message) */
   messageId?: string;
   filename: string;
@@ -24,4 +30,6 @@ export interface AttachmentStore {
   get(id: string): Promise<Attachment | undefined>;
   delete(id: string): Promise<boolean>;
   deleteBySession(sessionId: string): Promise<number>;
+  /** Bind a loose file (no session) to a session. Called when the file is first referenced in a completions request. */
+  updateSessionId?(id: string, sessionId: string): Promise<void>;
 }

@@ -209,6 +209,27 @@ describe("FileAttachmentStore", () => {
     });
   });
 
+  describe("sessionless uploads", () => {
+    it("saves attachment without sessionId", async () => {
+      const att = makeAttachment({ id: "att-loose", sessionId: undefined });
+      await store.save(att);
+
+      const retrieved = await store.get("att-loose");
+      expect(retrieved).toBeDefined();
+      expect(retrieved!.id).toBe("att-loose");
+      expect(retrieved!.sessionId).toBeUndefined();
+    });
+
+    it("sessionless attachments are not returned by getBySession", async () => {
+      await store.save(makeAttachment({ id: "att-loose", sessionId: undefined }));
+      await store.save(makeAttachment({ id: "att-bound", sessionId: "session-1" }));
+
+      const result = await store.getBySession("session-1");
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("att-bound");
+    });
+  });
+
   describe("edge cases", () => {
     it("handles empty store gracefully", async () => {
       expect(await store.getBySession("any")).toEqual([]);
