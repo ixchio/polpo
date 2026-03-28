@@ -188,6 +188,8 @@ export interface AgentIdentity {
   timezone?: string;
   /** Avatar image path relative to project root, served via /api/v1/files/read?path=<avatar> */
   avatar?: string;
+  /** Ready-to-use relative URL for fetching the avatar image. Read-only, set by server. */
+  avatarUrl?: string;
   /** Responsibilities — simple strings or structured objects with area/description/priority */
   responsibilities?: (string | AgentResponsibility)[];
   /** Communication tone — HOW the agent communicates */
