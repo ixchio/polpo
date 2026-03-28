@@ -101,6 +101,7 @@ export function createApp(orchestrator: Orchestrator, sseBridge: SSEBridge, opts
     getConfig: () => o.getConfig(),
     getMemoryStore: () => o.getMemoryStore(),
     getSessionStore: () => o.getSessionStore(),
+    getAttachmentStore: () => (o as any).attachmentStore ?? null,
     getStore: () => o.getStore(),
     emit: (event: string, data: any) => o.emit(event as any, data),
     resolveAgentModel: async (agentConfig: any, reasoning?: string) => {
