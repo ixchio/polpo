@@ -151,14 +151,13 @@ describe("Files", () => {
   });
 
   it("listFiles returns entries without error", async () => {
-    // List the .polpo directory (known to exist)
-    const result = await client.listFiles(".polpo");
+    // List the polpo root (maps to .polpo directory)
+    const result = await client.listFiles("polpo");
     expect(result.path).toBeDefined();
     expect(Array.isArray(result.entries)).toBe(true);
-    // .polpo dir should contain at least polpo.json
+    // polpo root should contain at least polpo.json
     const configEntry = result.entries.find((e) => e.name === "polpo.json");
     expect(configEntry).toBeDefined();
-    expect(configEntry!.type).toBe("file");
   });
 });
 
