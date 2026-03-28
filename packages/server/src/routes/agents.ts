@@ -4,6 +4,18 @@ import type { FileSystem } from "@polpo-ai/core";
 import { AddAgentSchema, UpdateAgentSchema, RenameTeamSchema, AddTeamSchema } from "../schemas.js";
 import { redactAgentConfig, redactTeam, sanitizeTranscriptEntry } from "../security.js";
 
+/** Enrich agent with avatarUrl for client convenience. */
+function withAvatarUrl(agent: any): any {
+  if (!agent?.identity?.avatar) return agent;
+  return {
+    ...agent,
+    identity: {
+      ...agent.identity,
+      avatarUrl: `/api/v1/files/read?path=${encodeURIComponent(agent.identity.avatar)}`,
+    },
+  };
+}
+
 /**
  * Agent/team management routes.
  */
@@ -41,7 +53,7 @@ export function agentRoutes(getDeps: () => {
   app.openapi(listAgentsRoute, async (c) => {
     const deps = getDeps();
     const agents = await deps.getAgents();
-    return c.json({ ok: true, data: agents.map(redactAgentConfig) });
+    return c.json({ ok: true, data: agents.map(a => withAvatarUrl(redactAgentConfig(a))) });
   });
 
   // POST /agents — add agent
@@ -379,7 +391,7 @@ export function agentRoutes(getDeps: () => {
     await deps.updateAgent(name, updates);
 
     const updated = (await deps.getAgents()).find(a => a.name === name);
-    return c.json({ ok: true, data: updated ? redactAgentConfig(updated) : null }, 200);
+    return c.json({ ok: true, data: updated ? withAvatarUrl(redactAgentConfig(updated)) : null }, 200);
   });
 
   // GET /agents/:name — single agent detail (registered after static routes to avoid conflicts)
@@ -410,7 +422,7 @@ export function agentRoutes(getDeps: () => {
     if (!agent) {
       return c.json({ ok: false, error: "Agent not found", code: "NOT_FOUND" }, 404);
     }
-    return c.json({ ok: true, data: redactAgentConfig(agent) }, 200);
+    return c.json({ ok: true, data: withAvatarUrl(redactAgentConfig(agent)) }, 200);
   });
 
   // ── POST /agents/:name/avatar — upload agent avatar ──
