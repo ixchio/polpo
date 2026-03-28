@@ -939,6 +939,58 @@ export class PolpoClient {
     return this.get<FilePreview>(`/files/preview?${params.toString()}`);
   }
 
+  /** Download/read a file. Returns raw Response for binary handling. */
+  async readFile(path: string, download?: boolean): Promise<Response> {
+    const params = new URLSearchParams({ path });
+    if (download) params.set("download", "1");
+    const url = this.apiUrl(`/files/read?${params.toString()}`);
+    const res = await this.fetchFn(url, {
+      headers: this.headers,
+    });
+    if (!res.ok) throw new PolpoApiError("File read failed", "INTERNAL_ERROR", res.status);
+    return res;
+  }
+
+  uploadFile(destPath: string, file: File | Blob, filename: string): Promise<{ uploaded: { name: string; size: number }[]; count: number }> {
+    const form = new FormData();
+    form.append("path", destPath);
+    form.append("file", file, filename);
+    const url = this.apiUrl("/files/upload");
+    return this.fetchFn(url, {
+      method: "POST",
+      headers: { ...(this.headers.Authorization ? { Authorization: this.headers.Authorization } : {}) },
+      body: form,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: { message: res.statusText } }));
+        throw new PolpoApiError((err as any).error?.message ?? "Upload failed", "INTERNAL_ERROR", res.status);
+      }
+      const json = await res.json() as any;
+      return json.data;
+    });
+  }
+
+  createDirectory(path: string): Promise<{ path: string }> {
+    return this.post<{ path: string }>("/files/mkdir", { path });
+  }
+
+  renameFile(path: string, newName: string): Promise<{ oldPath: string; newName: string }> {
+    return this.post<{ oldPath: string; newName: string }>("/files/rename", { path, newName });
+  }
+
+  deleteFile(path: string): Promise<{ path: string }> {
+    return this.post<{ path: string }>("/files/delete", { path });
+  }
+
+  searchFiles(query?: string, root?: string, limit?: number): Promise<{ files: { name: string; path: string }[]; total: number }> {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (root) params.set("root", root);
+    if (limit !== undefined) params.set("limit", String(limit));
+    const qs = params.toString();
+    return this.get<{ files: { name: string; path: string }[]; total: number }>(`/files/search${qs ? `?${qs}` : ""}`);
+  }
+
   // Backward-compat aliases
   /** @deprecated Use getPlaybooks instead. */
   getTemplates(): Promise<PlaybookInfo[]> { return this.getPlaybooks(); }

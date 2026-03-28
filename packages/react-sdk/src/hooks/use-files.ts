@@ -13,6 +13,17 @@ export interface UseFilesReturn {
   isListing: boolean;
   previewFile: (path: string, maxLines?: number) => Promise<FilePreview>;
   isPreviewing: boolean;
+  readFile: (path: string, download?: boolean) => Promise<Response>;
+  uploadFile: (destPath: string, file: File | Blob, filename: string) => Promise<{ uploaded: { name: string; size: number }[]; count: number }>;
+  isUploading: boolean;
+  createDirectory: (path: string) => Promise<{ path: string }>;
+  isCreatingDir: boolean;
+  renameFile: (path: string, newName: string) => Promise<{ oldPath: string; newName: string }>;
+  isRenaming: boolean;
+  deleteFile: (path: string) => Promise<boolean>;
+  isDeleting: boolean;
+  searchFiles: (query?: string, root?: string, limit?: number) => Promise<{ files: { name: string; path: string }[]; total: number }>;
+  isSearching: boolean;
   refetchRoots: () => Promise<void>;
 }
 
@@ -88,6 +99,73 @@ export function useFiles(path?: string): UseFilesReturn {
     ),
   );
 
+  const readFile = useCallback(
+    (path: string, download?: boolean) => client.readFile(path, download),
+    [client],
+  );
+
+  const { mutate: uploadFile, isPending: isUploading } = useMutation(
+    useCallback(
+      async (destPath: string, file: File | Blob, filename: string) => {
+        const result = await client.uploadFile(destPath, file, filename);
+        // Refresh entries if uploading to current path
+        if (currentPath) {
+          const data = await client.listFiles(currentPath);
+          setEntries(data.entries);
+        }
+        return result;
+      },
+      [client, currentPath],
+    ),
+  );
+
+  const { mutate: createDirectory, isPending: isCreatingDir } = useMutation(
+    useCallback(
+      async (dirPath: string) => {
+        const result = await client.createDirectory(dirPath);
+        if (currentPath) {
+          const data = await client.listFiles(currentPath);
+          setEntries(data.entries);
+        }
+        return result;
+      },
+      [client, currentPath],
+    ),
+  );
+
+  const { mutate: renameFile, isPending: isRenaming } = useMutation(
+    useCallback(
+      async (renamePath: string, newName: string) => {
+        const result = await client.renameFile(renamePath, newName);
+        setEntries((prev) =>
+          prev.map((e) => e.name === renamePath.split("/").pop() ? { ...e, name: newName } : e),
+        );
+        return result;
+      },
+      [client],
+    ),
+  );
+
+  const { mutate: deleteFile, isPending: isDeleting } = useMutation(
+    useCallback(
+      async (deletePath: string) => {
+        await client.deleteFile(deletePath);
+        setEntries((prev) => prev.filter((e) => e.name !== deletePath.split("/").pop()));
+        return true;
+      },
+      [client],
+    ),
+  );
+
+  const { mutate: searchFiles, isPending: isSearching } = useMutation(
+    useCallback(
+      async (query?: string, root?: string, limit?: number) => {
+        return client.searchFiles(query, root, limit);
+      },
+      [client],
+    ),
+  );
+
   return {
     roots,
     entries,
@@ -98,6 +176,17 @@ export function useFiles(path?: string): UseFilesReturn {
     isListing,
     previewFile,
     isPreviewing,
+    readFile,
+    uploadFile,
+    isUploading,
+    createDirectory,
+    isCreatingDir,
+    renameFile,
+    isRenaming,
+    deleteFile,
+    isDeleting,
+    searchFiles,
+    isSearching,
     refetchRoots,
   };
 }
