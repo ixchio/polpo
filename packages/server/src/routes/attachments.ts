@@ -217,11 +217,20 @@ export function attachmentRoutes(getDeps: () => AttachmentDeps) {
       data = new TextEncoder().encode(await fs.readFile(absPath));
     }
 
+    // ETag based on attachment ID + size (immutable once uploaded)
+    const etag = `"${attachment.id}-${attachment.size}"`;
+    const ifNoneMatch = c.req.header("If-None-Match");
+    if (ifNoneMatch === etag) {
+      return new Response(null, { status: 304, headers: { ETag: etag } });
+    }
+
     return new Response(Buffer.from(data), {
       headers: {
         "Content-Type": attachment.mimeType,
         "Content-Disposition": `inline; filename="${attachment.filename}"`,
         "Content-Length": String(data.byteLength),
+        "Cache-Control": "private, max-age=3600, immutable",
+        "ETag": etag,
       },
     });
   });

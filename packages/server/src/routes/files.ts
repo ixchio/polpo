@@ -295,6 +295,16 @@ export function fileRoutes(getDeps: () => FileRouteDeps): OpenAPIHono {
     try { s = await fs.stat(resolved); } catch { return c.json({ ok: false, error: "File not found" }, 404); }
     if (s.isDirectory) return c.json({ ok: false, error: "Path is a directory" }, 400);
 
+    // ETag based on size + last modified (or size-only if no mtime)
+    const mtime = s.modifiedAt ? s.modifiedAt.getTime().toString(36) : "0";
+    const etag = `"${s.size.toString(36)}-${mtime}"`;
+
+    // If client has a matching ETag, return 304 Not Modified (no body transfer)
+    const ifNoneMatch = c.req.header("If-None-Match");
+    if (ifNoneMatch === etag) {
+      return new Response(null, { status: 304, headers: { ETag: etag } });
+    }
+
     const mime = guessMime(resolved);
     const fileName = basename(resolved);
 
@@ -305,6 +315,7 @@ export function fileRoutes(getDeps: () => FileRouteDeps): OpenAPIHono {
       "Content-Type": mime,
       "Content-Length": String(buffer.byteLength),
       "Cache-Control": "private, max-age=60",
+      "ETag": etag,
     };
 
     if (download) {
