@@ -445,8 +445,12 @@ export function agentRoutes(getDeps: () => {
     const avatarPath = join(avatarsDir, filename);
     const relativePath = `.polpo/avatars/${filename}`;
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.writeFile(avatarPath, buffer.toString("base64"));
+    const data = new Uint8Array(await file.arrayBuffer());
+    if ((fs as any).writeFileBuffer) {
+      await (fs as any).writeFileBuffer(avatarPath, data);
+    } else {
+      await fs.writeFile(avatarPath, Buffer.from(data).toString("base64"));
+    }
 
     // Update agent identity with avatar path
     const identity = { ...(agent.identity ?? {}), avatar: relativePath };
