@@ -445,8 +445,7 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
     // ── Session persistence ──
     const sessionStore = deps.getSessionStore();
     const rawSessionHeader = c.req.header("x-session-id") ?? null;
-    const forceNewSession = rawSessionHeader === "new";
-    let sessionId: string | null = forceNewSession ? null : rawSessionHeader;
+    let sessionId: string | null = rawSessionHeader === "new" ? null : rawSessionHeader;
     if (sessionStore) {
       if (!sessionId) {
         const firstUserMsg = body.messages.find(m => m.role === "user");
@@ -454,19 +453,9 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
         // Agent scope: orchestrator sessions use null, agent sessions use the agent name
         const agentScope = agentMode ? body.agent! : null;
 
-        if (forceNewSession) {
-          // Client explicitly requested a new session — skip recency heuristic
-          sessionId = await sessionStore.create(sessionTitle, agentScope ?? undefined);
-        } else {
-          // Reuse latest session if recent (< 30 min), scoped by agent
-          const latest = await sessionStore.getLatestSession(agentScope);
-          const timeout = 30 * 60 * 1000;
-          if (latest && Date.now() - new Date(latest.updatedAt).getTime() < timeout) {
-            sessionId = latest.id;
-          } else {
-            sessionId = await sessionStore.create(sessionTitle, agentScope ?? undefined);
-          }
-        }
+        // No session ID provided — always create a new session.
+        // Clients that want to continue a conversation must pass x-session-id explicitly.
+        sessionId = await sessionStore.create(sessionTitle, agentScope ?? undefined);
       }
       // Persist user message (only the last one — earlier messages are already persisted)
       const lastUserMsg = [...body.messages].reverse().find(m => m.role === "user");
