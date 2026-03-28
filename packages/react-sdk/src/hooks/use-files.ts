@@ -9,14 +9,14 @@ export interface UseFilesReturn {
   currentPath: string | null;
   isLoading: boolean;
   error: Error | null;
-  listFiles: (root: string, path?: string) => Promise<FileEntry[]>;
+  listFiles: (path?: string) => Promise<FileEntry[]>;
   isListing: boolean;
-  previewFile: (root: string, path: string, maxLines?: number) => Promise<FilePreview>;
+  previewFile: (path: string, maxLines?: number) => Promise<FilePreview>;
   isPreviewing: boolean;
   refetchRoots: () => Promise<void>;
 }
 
-export function useFiles(root?: string, path?: string): UseFilesReturn {
+export function useFiles(path?: string): UseFilesReturn {
   const { client } = usePolpoContext();
 
   const [roots, setRoots] = useState<FileRoot[]>([]);
@@ -40,9 +40,9 @@ export function useFiles(root?: string, path?: string): UseFilesReturn {
     refetchRoots().finally(() => setIsLoading(false));
   }, [refetchRoots]);
 
-  // Auto-fetch entries when root/path changes
+  // Auto-fetch entries when path changes
   useEffect(() => {
-    if (!root) {
+    if (!path) {
       setEntries([]);
       setCurrentPath(null);
       return;
@@ -50,7 +50,7 @@ export function useFiles(root?: string, path?: string): UseFilesReturn {
     let cancelled = false;
     setIsLoading(true);
     client
-      .listFiles(root, path)
+      .listFiles(path)
       .then((data) => {
         if (!cancelled) {
           setEntries(data.entries);
@@ -65,12 +65,12 @@ export function useFiles(root?: string, path?: string): UseFilesReturn {
         }
       });
     return () => { cancelled = true; };
-  }, [client, root, path]);
+  }, [client, path]);
 
   const { mutate: listFiles, isPending: isListing } = useMutation(
     useCallback(
-      async (listRoot: string, listPath?: string) => {
-        const data = await client.listFiles(listRoot, listPath);
+      async (listPath?: string) => {
+        const data = await client.listFiles(listPath);
         setEntries(data.entries);
         setCurrentPath(data.path);
         return data.entries;
@@ -81,8 +81,8 @@ export function useFiles(root?: string, path?: string): UseFilesReturn {
 
   const { mutate: previewFile, isPending: isPreviewing } = useMutation(
     useCallback(
-      async (previewRoot: string, previewPath: string, maxLines?: number) => {
-        return client.previewFile(previewRoot, previewPath, maxLines);
+      async (previewPath: string, maxLines?: number) => {
+        return client.previewFile(previewPath, maxLines);
       },
       [client],
     ),

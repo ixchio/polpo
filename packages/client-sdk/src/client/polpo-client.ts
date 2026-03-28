@@ -926,14 +926,15 @@ export class PolpoClient {
     return this.get<{ roots: FileRoot[] }>("/files/roots");
   }
 
-  listFiles(root: string, path?: string): Promise<{ path: string; entries: FileEntry[] }> {
-    const params = new URLSearchParams({ root });
+  listFiles(path?: string): Promise<{ path: string; entries: FileEntry[] }> {
+    const params = new URLSearchParams();
     if (path) params.set("path", path);
-    return this.get<{ path: string; entries: FileEntry[] }>(`/files/list?${params.toString()}`);
+    const qs = params.toString();
+    return this.get<{ path: string; entries: FileEntry[] }>(`/files/list${qs ? `?${qs}` : ""}`);
   }
 
-  previewFile(root: string, path: string, maxLines?: number): Promise<FilePreview> {
-    const params = new URLSearchParams({ root, path });
+  previewFile(path: string, maxLines?: number): Promise<FilePreview> {
+    const params = new URLSearchParams({ path });
     if (maxLines !== undefined) params.set("maxLines", String(maxLines));
     return this.get<FilePreview>(`/files/preview?${params.toString()}`);
   }
