@@ -961,7 +961,7 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
             // If finalText is empty (LLM never responded), remove the empty placeholder
             // by setting content to a marker that indicates an interrupted response
             else {
-              await sessionStore.updateMessage(sessionId, assistantMsgId, "[Response interrupted]", safeToolCalls);
+              await sessionStore.updateMessage(sessionId, assistantMsgId, "", safeToolCalls);
             }
           }
         }
