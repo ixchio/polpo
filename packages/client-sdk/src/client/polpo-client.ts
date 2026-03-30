@@ -292,7 +292,7 @@ export class PolpoClient {
       const text = await res.text();
       throw new PolpoApiError(
         `Server returned ${res.status}: ${text.slice(0, 200)}`,
-        "non_json_response",
+        "INTERNAL_ERROR",
         res.status,
       );
     }
