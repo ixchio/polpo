@@ -30,9 +30,14 @@ export function useAgent(name: string): UseAgentReturn {
   }, [client, name]);
 
   useEffect(() => {
+    if (!name) {
+      setAgent(null);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     fetchAgent().finally(() => setIsLoading(false));
-  }, [fetchAgent]);
+  }, [fetchAgent, name]);
 
   return { agent, isLoading, error, refetch: fetchAgent };
 }

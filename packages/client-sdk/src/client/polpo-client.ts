@@ -287,6 +287,15 @@ export class PolpoClient {
       headers: { ...this.headers, "Content-Type": "application/json" },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      const text = await res.text();
+      throw new PolpoApiError(
+        `Server returned ${res.status}: ${text.slice(0, 200)}`,
+        "non_json_response",
+        res.status,
+      );
+    }
     const json = (await res.json()) as ApiResult<T>;
     if (!json.ok) {
       throw new PolpoApiError(json.error, json.code, res.status, json.details);

@@ -307,18 +307,38 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       setError(null);
 
       try {
-        const historyMessages: ChatCompletionMessage[] = messagesRef.current.map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        }));
+        // Build history — include tool_calls on the assistant message that triggered the client-side tool
+        const historyMessages: ChatCompletionMessage[] = messagesRef.current.map((m) => {
+          const msg: ChatCompletionMessage = {
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          };
+          // If this assistant message has toolCalls that match the pending tool, include them
+          if (m.role === "assistant" && m.toolCalls) {
+            const clientToolCall = m.toolCalls.find(
+              (tc) => tc.id === toolCallId || tc.name === toolName,
+            );
+            if (clientToolCall) {
+              msg.tool_calls = [{
+                id: clientToolCall.id,
+                type: "function",
+                function: {
+                  name: clientToolCall.name,
+                  arguments: JSON.stringify(clientToolCall.arguments ?? {}),
+                },
+              }];
+            }
+          }
+          return msg;
+        });
 
         // Add tool result message
         historyMessages.push({
-          role: "tool" as any,
+          role: "tool",
           content: result,
           tool_call_id: toolCallId,
           name: toolName,
-        } as any);
+        });
 
         await streamResponse(historyMessages);
       } catch (err) {

@@ -288,7 +288,26 @@ function convertMessages(
       const resolvedContent = resolveFileContentParts(msg.content);
       aiMessages.push({ role: "user", content: toAIContent(resolvedContent) });
     } else if (msg.role === "assistant") {
-      aiMessages.push({ role: "assistant", content: extractText(msg.content) });
+      // If the assistant message includes tool_calls (client-side tool), reconstruct as AI SDK format
+      const tc = (msg as any).tool_calls as Array<{ id: string; type: string; function: { name: string; arguments: string } }> | undefined;
+      if (tc?.length) {
+        const parts: any[] = [];
+        const text = extractText(msg.content);
+        if (text) parts.push({ type: "text", text });
+        for (const call of tc) {
+          let input: unknown = {};
+          try { input = JSON.parse(call.function.arguments); } catch { /* best effort */ }
+          parts.push({
+            type: "tool-call",
+            toolCallId: call.id,
+            toolName: call.function.name,
+            input,
+          });
+        }
+        aiMessages.push({ role: "assistant", content: parts });
+      } else {
+        aiMessages.push({ role: "assistant", content: extractText(msg.content) });
+      }
     } else if (msg.role === "tool" && msg.tool_call_id) {
       // Client-side tool result — convert to AI SDK tool-result format
       aiMessages.push({

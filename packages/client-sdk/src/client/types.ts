@@ -1229,9 +1229,19 @@ export interface FileContentPart {
 export type ContentPart = TextContentPart | ImageUrlContentPart | FileContentPart;
 
 export interface ChatCompletionMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   /** Plain string or multimodal content parts (text, images, files). */
   content: string | ContentPart[];
+  /** Tool calls made by the assistant (for assistant messages with client-side tool calls). */
+  tool_calls?: Array<{
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  }>;
+  /** ID of the tool call this message responds to (for role=tool). */
+  tool_call_id?: string;
+  /** Tool name (for role=tool). */
+  name?: string;
 }
 
 export interface ChatCompletionRequest {
