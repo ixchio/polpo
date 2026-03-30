@@ -1,9 +1,10 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePolpoContext } from "../provider/polpo-context.js";
 import type {
   ChatMessage,
   ChatCompletionChunk,
   ChatCompletionMessage,
+  ContentPart,
   AskUserPayload,
   MissionPreviewPayload,
   VaultPreviewPayload,
@@ -27,7 +28,11 @@ export interface UseChatOptions {
   onFinish?: (text: string) => void;
   /** Called on error. */
   onError?: (error: Error) => void;
-  /** Called when the agent asks clarifying questions. */
+  /** Called after each stream update — useful for scroll-to-bottom. */
+  onUpdate?: () => void;
+  /** Called when a new session is created (first message in a new chat). */
+  onSessionCreated?: (sessionId: string) => void;
+  /** Called when the agent asks clarifying questions (legacy orchestrator mode). */
   onAskUser?: (payload: AskUserPayload) => void;
   /** Called when the agent proposes a mission for review. */
   onMissionPreview?: (payload: MissionPreviewPayload) => void;
@@ -43,7 +48,7 @@ export interface UseChatOptions {
   onToolCall?: (toolCall: ToolCallEvent) => void;
 }
 
-export type ChatStatus = "idle" | "streaming" | "error";
+export type ChatStatus = "idle" | "streaming" | "loading" | "error";
 
 /** A pending client-side tool call that needs a result from the client. */
 export interface PendingToolCall {
@@ -56,10 +61,14 @@ export interface PendingToolCall {
 }
 
 export interface UseChatReturn {
-  /** All messages in the current session (user + assistant). */
+  /**
+   * All messages in the current session (user + assistant).
+   * During streaming, the last assistant message updates in-place with accumulating
+   * content and tool calls — no separate `streamingText` needed.
+   */
   messages: ChatMessage[];
   /** Send a message (text or multimodal content parts). Streams the response automatically. */
-  sendMessage: (content: string | import("@polpo-ai/sdk").ContentPart[]) => Promise<void>;
+  sendMessage: (content: string | ContentPart[]) => Promise<void>;
   /** Send a tool result back to the server. Used for client-side tools (e.g. ask_user_question). */
   sendToolResult: (toolCallId: string, toolName: string, result: string) => Promise<void>;
   /** Current session ID. `null` until the first response from the server. */
@@ -74,10 +83,6 @@ export interface UseChatReturn {
   error: Error | null;
   /** Whether a response is currently streaming. */
   isStreaming: boolean;
-  /** The text being streamed for the current assistant response. */
-  streamingText: string;
-  /** Active tool calls during the current response. */
-  activeToolCalls: ToolCallEvent[];
   /** Client-side tool call awaiting a result (e.g. ask_user_question). null when none pending. */
   pendingToolCall: PendingToolCall | null;
   /** Abort the current streaming response. */
@@ -91,35 +96,56 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionIdState] = useState<string | null>(options.sessionId ?? null);
-  const [status, setStatus] = useState<ChatStatus>("idle");
+  const [status, setStatus] = useState<ChatStatus>(options.sessionId ? "loading" : "idle");
   const [error, setError] = useState<Error | null>(null);
-  const [streamingText, setStreamingText] = useState("");
-  const [activeToolCalls, setActiveToolCalls] = useState<ToolCallEvent[]>([]);
   const [pendingToolCall, setPendingToolCall] = useState<PendingToolCall | null>(null);
 
   const streamRef = useRef<ChatCompletionStream | null>(null);
+  const isStreamingRef = useRef(false);
   const sessionIdRef = useRef<string | null>(options.sessionId ?? null);
-  /** Track the last assistant message content for tool call context. */
-  const lastAssistantTextRef = useRef<string>("");
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
+  // ── Auto-load session messages on mount ──
+  const loadedRef = useRef(false);
+  useEffect(() => {
+    if (!options.sessionId || loadedRef.current) return;
+    loadedRef.current = true;
+    client.getSessionMessages(options.sessionId)
+      .then((data) => {
+        setMessages(data.messages);
+        setStatus("idle");
+        requestAnimationFrame(() => optionsRef.current.onUpdate?.());
+      })
+      .catch(() => {
+        setMessages([]);
+        setStatus("idle");
+      });
+  }, [options.sessionId, client]);
+
+  // ── Set session ID (manual) ──
   const setSessionId = useCallback(
     async (id: string | null) => {
       setSessionIdState(id);
       sessionIdRef.current = id;
       if (id) {
+        setStatus("loading");
         try {
           const data = await client.getSessionMessages(id);
           setMessages(data.messages);
         } catch {
           setMessages([]);
         }
+        setStatus("idle");
+        requestAnimationFrame(() => optionsRef.current.onUpdate?.());
       } else {
         setMessages([]);
+        setStatus("idle");
       }
-      setStatus("idle");
       setError(null);
-      setStreamingText("");
-      setActiveToolCalls([]);
+      setPendingToolCall(null);
     },
     [client],
   );
@@ -131,180 +157,162 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     setMessages([]);
     setStatus("idle");
     setError(null);
-    setStreamingText("");
-    setActiveToolCalls([]);
+    setPendingToolCall(null);
+    isStreamingRef.current = false;
   }, []);
 
   const abort = useCallback(() => {
     streamRef.current?.abort();
   }, []);
 
+  // ── Shared streaming logic ──
+  const streamResponse = useCallback(
+    async (historyMessages: ChatCompletionMessage[]) => {
+      const stream = client.chatCompletionsStream({
+        messages: historyMessages,
+        sessionId: sessionIdRef.current ?? undefined,
+        agent: optionsRef.current.agent,
+      });
+      streamRef.current = stream;
+
+      // Add empty assistant message that will be updated in-place
+      const assistantId = `msg-${Date.now()}`;
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantId, role: "assistant", content: "", ts: new Date().toISOString() },
+      ]);
+
+      let fullText = "";
+      const toolCalls = new Map<string, ToolCallEvent>();
+
+      for await (const chunk of stream) {
+        // Capture session ID
+        if (stream.sessionId && !sessionIdRef.current) {
+          sessionIdRef.current = stream.sessionId;
+          setSessionIdState(stream.sessionId);
+          optionsRef.current.onSessionCreated?.(stream.sessionId);
+        }
+
+        const choice = chunk.choices[0];
+        if (!choice) continue;
+        let updated = false;
+
+        // Text content
+        if (choice.delta.content) {
+          fullText += choice.delta.content;
+          updated = true;
+        }
+
+        // Tool call events (server-side tool execution)
+        if (choice.tool_call) {
+          toolCalls.set(choice.tool_call.id, choice.tool_call);
+          updated = true;
+          optionsRef.current.onToolCall?.(choice.tool_call);
+        }
+
+        // Update assistant message in-place
+        if (updated) {
+          const content = fullText;
+          const tc = toolCalls.size > 0 ? Array.from(toolCalls.values()) : undefined;
+          setMessages((prev) => [
+            ...prev.slice(0, -1),
+            { id: assistantId, role: "assistant", content, ts: new Date().toISOString(), toolCalls: tc },
+          ]);
+          optionsRef.current.onUpdate?.();
+        }
+
+        // Client-side tool calls (finish_reason: "tool_calls")
+        if (choice.finish_reason === "tool_calls" && choice.delta.tool_calls?.length) {
+          const tc = choice.delta.tool_calls[0];
+          let args: Record<string, unknown> = {};
+          try { args = JSON.parse(tc.function.arguments); } catch { /* best effort */ }
+          setPendingToolCall({
+            toolCallId: tc.id,
+            toolName: tc.function.name,
+            arguments: args,
+          });
+        }
+
+        // Legacy special finish reasons
+        if (choice.finish_reason === "ask_user" && choice.ask_user) optionsRef.current.onAskUser?.(choice.ask_user);
+        if (choice.finish_reason === "mission_preview" && choice.mission_preview) optionsRef.current.onMissionPreview?.(choice.mission_preview);
+        if (choice.finish_reason === "vault_preview" && choice.vault_preview) optionsRef.current.onVaultPreview?.(choice.vault_preview);
+        if (choice.finish_reason === "open_file" && choice.open_file) optionsRef.current.onOpenFile?.(choice.open_file);
+        if (choice.finish_reason === "navigate_to" && choice.navigate_to) optionsRef.current.onNavigateTo?.(choice.navigate_to);
+        if (choice.finish_reason === "open_tab" && choice.open_tab) optionsRef.current.onOpenTab?.(choice.open_tab);
+
+        optionsRef.current.onChunk?.(chunk);
+      }
+
+      streamRef.current = null;
+      isStreamingRef.current = false;
+      setStatus("idle");
+      optionsRef.current.onFinish?.(fullText);
+    },
+    [client],
+  );
+
+  // ── Send message ──
   const sendMessage = useCallback(
-    async (content: string | import("@polpo-ai/sdk").ContentPart[]) => {
-      const userText = typeof content === "string" ? content : content.filter(p => p.type === "text").map(p => (p as any).text).join(" ");
+    async (content: string | ContentPart[]) => {
+      if (isStreamingRef.current) return;
 
       // Optimistic: add user message immediately
       const userMsg: ChatMessage = {
         id: `tmp-${Date.now()}`,
         role: "user",
-        content: userText,
+        content,
         ts: new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, userMsg]);
+
+      const allMessages = [...messagesRef.current, userMsg];
+      setMessages(allMessages);
+
       setStatus("streaming");
+      isStreamingRef.current = true;
       setError(null);
-      setStreamingText("");
-      setActiveToolCalls([]);
+      setPendingToolCall(null);
 
       try {
-        // Build messages array: full history + new message
-        const historyMessages: ChatCompletionMessage[] = messages.map((m) => ({
+        const historyMessages: ChatCompletionMessage[] = allMessages.map((m) => ({
           role: m.role as "user" | "assistant",
           content: m.content,
         }));
-        historyMessages.push({
-          role: "user",
-          content: typeof content === "string" ? content : content,
-        });
 
-        const stream = client.chatCompletionsStream({
-          messages: historyMessages,
-          sessionId: sessionIdRef.current ?? undefined,
-          agent: options.agent,
-        });
-        streamRef.current = stream;
-
-        let fullText = "";
-
-        for await (const chunk of stream) {
-          // Capture session ID from the stream (set after first chunk)
-          if (stream.sessionId && !sessionIdRef.current) {
-            sessionIdRef.current = stream.sessionId;
-            setSessionIdState(stream.sessionId);
-          }
-
-          const choice = chunk.choices[0];
-          if (!choice) continue;
-
-          // Text content
-          if (choice.delta.content) {
-            fullText += choice.delta.content;
-            setStreamingText(fullText);
-          }
-
-          // Tool calls
-          if (choice.tool_call) {
-            setActiveToolCalls((prev) => {
-              const idx = prev.findIndex((tc) => tc.id === choice.tool_call!.id);
-              if (idx >= 0) {
-                const next = [...prev];
-                next[idx] = choice.tool_call!;
-                return next;
-              }
-              return [...prev, choice.tool_call!];
-            });
-            options.onToolCall?.(choice.tool_call);
-          }
-
-          // Standard client-side tool calls (finish_reason: "tool_calls")
-          if (choice.finish_reason === "tool_calls" && choice.delta.tool_calls?.length) {
-            const tc = choice.delta.tool_calls[0];
-            let args: Record<string, unknown> = {};
-            try { args = JSON.parse(tc.function.arguments); } catch { /* best effort */ }
-            setPendingToolCall({
-              toolCallId: tc.id,
-              toolName: tc.function.name,
-              arguments: args,
-            });
-            lastAssistantTextRef.current = fullText;
-          }
-
-          // Legacy special finish reasons (orchestrator mode)
-          if (choice.finish_reason === "ask_user" && choice.ask_user) {
-            options.onAskUser?.(choice.ask_user);
-          }
-          if (choice.finish_reason === "mission_preview" && choice.mission_preview) {
-            options.onMissionPreview?.(choice.mission_preview);
-          }
-          if (choice.finish_reason === "vault_preview" && choice.vault_preview) {
-            options.onVaultPreview?.(choice.vault_preview);
-          }
-          if (choice.finish_reason === "open_file" && choice.open_file) {
-            options.onOpenFile?.(choice.open_file);
-          }
-          if (choice.finish_reason === "navigate_to" && choice.navigate_to) {
-            options.onNavigateTo?.(choice.navigate_to);
-          }
-          if (choice.finish_reason === "open_tab" && choice.open_tab) {
-            options.onOpenTab?.(choice.open_tab);
-          }
-
-          options.onChunk?.(chunk);
-        }
-
-        // Stream finished — add assistant message
-        if (fullText) {
-          const assistantMsg: ChatMessage = {
-            id: `msg-${Date.now()}`,
-            role: "assistant",
-            content: fullText,
-            ts: new Date().toISOString(),
-          };
-          setMessages((prev) => [...prev, assistantMsg]);
-        }
-
-        setStreamingText("");
-        setActiveToolCalls([]);
-        setStatus("idle");
-        streamRef.current = null;
-        options.onFinish?.(fullText);
+        await streamResponse(historyMessages);
       } catch (err) {
         if ((err as DOMException)?.name === "AbortError") {
-          // User aborted — keep partial text as message if any
-          const partial = streamingText;
-          if (partial) {
-            setMessages((prev) => [
-              ...prev,
-              { id: `msg-${Date.now()}`, role: "assistant", content: partial, ts: new Date().toISOString() },
-            ]);
-          }
-          setStreamingText("");
-          setActiveToolCalls([]);
+          // Keep partial message as-is
+          isStreamingRef.current = false;
           setStatus("idle");
           return;
         }
         setError(err as Error);
         setStatus("error");
-        options.onError?.(err as Error);
+        isStreamingRef.current = false;
+        // Remove the empty assistant message on error
+        setMessages((prev) => prev[prev.length - 1]?.content === "" ? prev.slice(0, -1) : prev);
+        optionsRef.current.onError?.(err as Error);
       }
     },
-    [client, messages, options, streamingText],
+    [streamResponse],
   );
 
+  // ── Send tool result ──
   const sendToolResult = useCallback(
     async (toolCallId: string, toolName: string, result: string) => {
       setPendingToolCall(null);
       setStatus("streaming");
+      isStreamingRef.current = true;
       setError(null);
-      setStreamingText("");
-      setActiveToolCalls([]);
 
       try {
-        // Build messages: full history + assistant message with tool_calls + tool result
-        const historyMessages: ChatCompletionMessage[] = messages.map((m) => ({
+        const historyMessages: ChatCompletionMessage[] = messagesRef.current.map((m) => ({
           role: m.role as "user" | "assistant",
           content: m.content,
         }));
 
-        // Add the assistant message that triggered the tool call (with tool_calls field)
-        if (lastAssistantTextRef.current) {
-          historyMessages.push({
-            role: "assistant",
-            content: lastAssistantTextRef.current,
-          });
-        }
-
-        // Add the tool result
+        // Add tool result message
         historyMessages.push({
           role: "tool" as any,
           content: result,
@@ -312,83 +320,20 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
           name: toolName,
         } as any);
 
-        const stream = client.chatCompletionsStream({
-          messages: historyMessages,
-          sessionId: sessionIdRef.current ?? undefined,
-          agent: options.agent,
-        });
-        streamRef.current = stream;
-
-        let fullText = "";
-
-        for await (const chunk of stream) {
-          if (stream.sessionId && !sessionIdRef.current) {
-            sessionIdRef.current = stream.sessionId;
-            setSessionIdState(stream.sessionId);
-          }
-
-          const choice = chunk.choices[0];
-          if (!choice) continue;
-
-          if (choice.delta.content) {
-            fullText += choice.delta.content;
-            setStreamingText(fullText);
-          }
-
-          if (choice.tool_call) {
-            setActiveToolCalls((prev) => {
-              const idx = prev.findIndex((tc) => tc.id === choice.tool_call!.id);
-              if (idx >= 0) {
-                const next = [...prev];
-                next[idx] = choice.tool_call!;
-                return next;
-              }
-              return [...prev, choice.tool_call!];
-            });
-            options.onToolCall?.(choice.tool_call);
-          }
-
-          // Handle another client-side tool call in the resumed stream
-          if (choice.finish_reason === "tool_calls" && choice.delta.tool_calls?.length) {
-            const tc = choice.delta.tool_calls[0];
-            let args: Record<string, unknown> = {};
-            try { args = JSON.parse(tc.function.arguments); } catch { /* best effort */ }
-            setPendingToolCall({
-              toolCallId: tc.id,
-              toolName: tc.function.name,
-              arguments: args,
-            });
-            lastAssistantTextRef.current = fullText;
-          }
-
-          options.onChunk?.(chunk);
-        }
-
-        if (fullText) {
-          setMessages((prev) => [
-            ...prev,
-            { id: `msg-${Date.now()}`, role: "assistant", content: fullText, ts: new Date().toISOString() },
-          ]);
-        }
-
-        setStreamingText("");
-        setActiveToolCalls([]);
-        setStatus("idle");
-        streamRef.current = null;
-        options.onFinish?.(fullText);
+        await streamResponse(historyMessages);
       } catch (err) {
         if ((err as DOMException)?.name === "AbortError") {
-          setStreamingText("");
-          setActiveToolCalls([]);
+          isStreamingRef.current = false;
           setStatus("idle");
           return;
         }
         setError(err as Error);
         setStatus("error");
-        options.onError?.(err as Error);
+        isStreamingRef.current = false;
+        optionsRef.current.onError?.(err as Error);
       }
     },
-    [client, messages, options],
+    [streamResponse],
   );
 
   return {
@@ -401,8 +346,6 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     status,
     error,
     isStreaming: status === "streaming",
-    streamingText,
-    activeToolCalls,
     pendingToolCall,
     abort,
   };
