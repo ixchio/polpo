@@ -497,6 +497,14 @@ export interface CompletionRouteDeps {
     tools: any[];
     executor: (name: string, args: Record<string, unknown>) => Promise<string>;
   }>;
+  /** Called after each completion finishes (streaming or non-streaming). Receives usage, model info, and provider metadata. Fire-and-forget — errors are silently ignored. */
+  onCompletionFinished?: (info: {
+    usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+    model: string;
+    agent?: string;
+    sessionId?: string;
+    providerMetadata?: Record<string, unknown>;
+  }) => void;
   /** Orchestrator mode support (optional — returns 501 if not provided). */
   resolveOrchestratorContext?: () => Promise<{
     systemPrompt: string;
@@ -656,6 +664,7 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
         let finalText = "";
         let totalUsage: LanguageModelUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 } as LanguageModelUsage;
         const toolCallsAccum: any[] = [];
+        let lastProviderMetadata: Record<string, unknown> | undefined;
 
         try {
           for (let turn = 0; turn < MAX_TURNS; turn++) {
@@ -749,6 +758,7 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
               outputTokens: (totalUsage.outputTokens ?? 0) + (usage.outputTokens ?? 0),
               totalTokens: (totalUsage.totalTokens ?? 0) + (usage.totalTokens ?? 0),
             } as LanguageModelUsage;
+            try { lastProviderMetadata = (await result.providerMetadata) as Record<string, unknown>; } catch { /* best effort */ }
 
             // Push assistant response message into conversation history
             // AI SDK format: assistant message with text + tool calls
@@ -958,12 +968,20 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
             if (finalText.trim()) {
               await sessionStore.updateMessage(sessionId, assistantMsgId, finalText.trim(), safeToolCalls);
             }
-            // If finalText is empty (LLM never responded), remove the empty placeholder
-            // by setting content to a marker that indicates an interrupted response
             else {
               await sessionStore.updateMessage(sessionId, assistantMsgId, "", safeToolCalls);
             }
           }
+          // Notify consumer (e.g. cloud metering) — fire-and-forget
+          try {
+            deps.onCompletionFinished?.({
+              usage: totalUsage,
+              model: m.id ?? m.provider,
+              agent: body.agent,
+              sessionId: sessionId ?? undefined,
+              providerMetadata: lastProviderMetadata,
+            });
+          } catch { /* never fail on callback */ }
         }
       }) as any;
     } else {
@@ -979,6 +997,7 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
       let finalText = "";
       let totalUsage: LanguageModelUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 } as LanguageModelUsage;
       const toolCallsAccum: any[] = [];
+      let lastProviderMetadata: Record<string, unknown> | undefined;
 
       try {
         for (let turn = 0; turn < MAX_TURNS; turn++) {
@@ -1016,6 +1035,7 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
             outputTokens: (totalUsage.outputTokens ?? 0) + (usage.outputTokens ?? 0),
             totalTokens: (totalUsage.totalTokens ?? 0) + (usage.totalTokens ?? 0),
           } as LanguageModelUsage;
+          try { lastProviderMetadata = genResult.providerMetadata as Record<string, unknown>; } catch { /* best effort */ }
 
           // Push assistant response message into conversation history
           const assistantContent: any[] = [];
@@ -1255,6 +1275,16 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
             await sessionStore.updateMessage(sessionId, assistantMsgId, "[Response interrupted]", safeToolCalls);
           }
         }
+        // Notify consumer (e.g. cloud metering) — fire-and-forget
+        try {
+          deps.onCompletionFinished?.({
+            usage: totalUsage,
+            model: m.id ?? m.provider,
+            agent: body.agent,
+            sessionId: sessionId ?? undefined,
+            providerMetadata: lastProviderMetadata,
+          });
+        } catch { /* never fail on callback */ }
       }
     }
   });
