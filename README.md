@@ -14,13 +14,13 @@
   <a href="https://www.npmjs.com/package/polpo-ai"><img src="https://img.shields.io/npm/v/polpo-ai.svg" alt="npm" /></a>
   <a href="https://github.com/lumea-labs/polpo/actions/workflows/ci.yml"><img src="https://github.com/lumea-labs/polpo/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/lumea-labs/polpo/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT" /></a>
-  <a href="https://discord.gg/xha8trjq"><img src="https://img.shields.io/discord/placeholder?label=discord" alt="Discord" /></a>
+  <a href="https://discord.gg/6JHCYQHr"><img src="https://img.shields.io/discord/placeholder?label=discord" alt="Discord" /></a>
 </p>
 
 <p align="center">
   <a href="https://docs.polpo.sh">Docs</a> &middot;
   <a href="https://polpo.sh">Website</a> &middot;
-  <a href="https://discord.gg/xha8trjq">Discord</a> &middot;
+  <a href="https://discord.gg/6JHCYQHr">Discord</a> &middot;
   <a href="https://github.com/lumea-labs/polpo/issues">Issues</a>
 </p>
 
