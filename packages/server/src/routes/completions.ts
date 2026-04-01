@@ -464,6 +464,8 @@ const CLIENT_SIDE_TOOL_NAMES = new Set(Object.keys(CLIENT_SIDE_TOOLS));
  * Matches the shape returned by resolveAgentModel.
  */
 interface ResolvedModelInfo {
+  /** Model identifier (e.g. "claude-sonnet-4.5") — optional for backwards compat. */
+  id?: string;
   aiModel: LanguageModel;
   provider: string;
   contextWindow: number;
@@ -976,7 +978,7 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
           try {
             deps.onCompletionFinished?.({
               usage: totalUsage,
-              model: m.provider,
+              model: m.id ?? m.provider,
               agent: body.agent,
               sessionId: sessionId ?? undefined,
               providerMetadata: lastProviderMetadata,
@@ -1279,7 +1281,7 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
         try {
           deps.onCompletionFinished?.({
             usage: totalUsage,
-            model: m.provider,
+            model: m.id ?? m.provider,
             agent: body.agent,
             sessionId: sessionId ?? undefined,
             providerMetadata: lastProviderMetadata,
