@@ -976,7 +976,7 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
           try {
             deps.onCompletionFinished?.({
               usage: totalUsage,
-              model: m.id ?? m.provider,
+              model: m.provider,
               agent: body.agent,
               sessionId: sessionId ?? undefined,
               providerMetadata: lastProviderMetadata,
@@ -1279,7 +1279,7 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
         try {
           deps.onCompletionFinished?.({
             usage: totalUsage,
-            model: m.id ?? m.provider,
+            model: m.provider,
             agent: body.agent,
             sessionId: sessionId ?? undefined,
             providerMetadata: lastProviderMetadata,
