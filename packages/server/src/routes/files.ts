@@ -1,14 +1,10 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import { resolve, relative, extname, basename, dirname } from "node:path";
-import type { FileSystem } from "@polpo-ai/core";
+import type { FileSystem, FileEntry } from "@polpo-ai/core";
 
 const POLPO_DIR_NAME = ".polpo";
 
-// ── FS helpers for optional methods ──────────────────────────────────────────
-// Optional methods use `as any` cast because they're defined with `?` on the interface.
-// At runtime, implementations (NodeFileSystem, SandboxProxyFS) always provide them.
-
-interface FileEntry { name: string; isDirectory: boolean; isFile: boolean; }
+// ── FS helpers ──────────────────────────────────────────────────────────────
 
 async function readdirTyped(fs: FileSystem, path: string): Promise<FileEntry[]> {
   if ((fs as any).readdirWithTypes) return (fs as any).readdirWithTypes(path);
@@ -252,18 +248,30 @@ export function fileRoutes(getDeps: () => FileRouteDeps): OpenAPIHono {
     const entries = [];
     for (const d of rawEntries) {
       if (d.name.startsWith(".") && d.name !== ".agent") continue;
-      const fullPath = resolve(resolved, d.name);
       const isDir = d.isDirectory;
-      let fileStat;
-      try { fileStat = await fs.stat(fullPath); } catch { /* skip */ }
-      entries.push({
-        name: d.name,
-        type: isDir ? "directory" : "file",
-        ...(fileStat ? {
-          ...(isDir ? {} : { size: fileStat.size, mimeType: guessMime(d.name) }),
-          modifiedAt: fileStat.modifiedAt?.toISOString(),
-        } : {}),
-      });
+
+      // Use metadata from readdir when available (avoids per-file stat calls)
+      if (d.size != null || d.modifiedAt != null) {
+        entries.push({
+          name: d.name,
+          type: isDir ? "directory" : "file",
+          ...(isDir ? {} : { size: d.size, mimeType: guessMime(d.name) }),
+          modifiedAt: d.modifiedAt?.toISOString(),
+        });
+      } else {
+        // Fallback: stat each file (local filesystem doesn't include metadata in readdir)
+        const fullPath = resolve(resolved, d.name);
+        let fileStat;
+        try { fileStat = await fs.stat(fullPath); } catch { /* skip */ }
+        entries.push({
+          name: d.name,
+          type: isDir ? "directory" : "file",
+          ...(fileStat ? {
+            ...(isDir ? {} : { size: fileStat.size, mimeType: guessMime(d.name) }),
+            modifiedAt: fileStat.modifiedAt?.toISOString(),
+          } : {}),
+        });
+      }
     }
 
     entries.sort((a: any, b: any) => {
