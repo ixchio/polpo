@@ -231,7 +231,7 @@ export function buildSystemPrompt(agent: AgentConfig, cwd: string, polpoDir?: st
     : [];
 
   // Core prompt: identity, responsibilities, tone, personality, hierarchy, systemPrompt, skills
-  // This is the shared logic between self-hosted and cloud (lives in @polpo-ai/core).
+  // Shared agent loop logic (lives in @polpo-ai/core).
   const parts = [buildAgentSystemPrompt(agent, { skills })];
 
   // Shell-specific sections below (tools, cwd, sandbox paths)

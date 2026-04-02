@@ -336,7 +336,7 @@ const ALL_TOOL_NAMES: SystemToolName[] = ["read", "write", "edit", "bash", "glob
  */
 export function createSystemTools(cwd: string, allowedTools?: string[], allowedPaths?: string[], outputDir?: string, vault?: ResolvedVault, fs?: FileSystem, shell?: Shell): AgentTool<any>[] {
   if (!fs || !shell) {
-    throw new Error("createSystemTools requires fs and shell arguments. Use NodeFileSystem/NodeShell for Node.js or SandboxProxyFS/SandboxProxyShell for cloud.");
+    throw new Error("createSystemTools requires fs and shell arguments. Use NodeFileSystem/NodeShell for Node.js or SandboxProxyFS/SandboxProxyShell for remote execution.");
   }
   const _fs = fs;
   const _shell = shell;

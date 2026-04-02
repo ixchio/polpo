@@ -44,7 +44,7 @@ function readConfigFromFile(): RunnerConfig {
 }
 
 /**
- * Cloud mode: read RunnerConfig from Neon DB via RunStore.
+ * DB mode: read RunnerConfig from database via RunStore.
  * Usage: runner --run-id <id> --db <postgres-url>
  */
 async function readConfigFromDb(): Promise<RunnerConfig> {
@@ -159,7 +159,7 @@ async function main(): Promise<void> {
   const actLog = new RunActivityLog(config.polpoDir, config.runId, config.taskId, config.agent.name);
 
   // When LogStore is available (postgres/sqlite), persist transcript to DB.
-  // This ensures transcript survives sandbox destruction in cloud mode.
+  // This ensures transcript survives sandbox destruction.
   let logSessionId: string | undefined;
   if (logStore) {
     logSessionId = await logStore.startSession();
@@ -177,7 +177,7 @@ async function main(): Promise<void> {
     activity: { filesCreated: [], filesEdited: [], toolCalls: 0, totalTokens: 0, lastUpdate: now },
     configPath: isDbMode ? `db://${config.runId}` : join(process.argv[process.argv.indexOf("--config") + 1]),
   };
-  // In DB mode, run record already exists (created by cloud spawner) — update it with PID
+  // In DB mode, run record already exists (created by spawner) — update it with PID
   await runStore.upsertRun(initialRecord);
   actLog.logEvent("spawning", { task: config.task.title });
 
@@ -203,7 +203,7 @@ async function main(): Promise<void> {
     // Wire transcript persistence — every agent message gets written to the run log
     handle.onTranscript = (entry) => {
       actLog.logTranscript(entry);
-      // Persist transcript to DB when LogStore is available (cloud mode)
+      // Persist transcript to DB when LogStore is available
       if (logStore && logSessionId) {
         const event = entry.type === "assistant" ? "transcript:assistant"
           : entry.type === "tool_result" ? "transcript:tool_result"

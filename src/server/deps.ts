@@ -3,7 +3,7 @@
  *
  * Each route factory accepts a `() => XxxDeps` thunk that is evaluated
  * at request time (after orchestrator init).  This decouples routes from
- * the Orchestrator god-object so the cloud can wire stores directly.
+ * the Orchestrator god-object so consumers can wire stores directly.
  */
 
 import type { TaskStore } from "../core/task-store.js";

@@ -324,7 +324,7 @@ function createSpeakTool(cwd: string, sandbox: string[], vault?: ResolvedVault):
         }
       }
 
-      // Cloud provider with edge-tts fallback
+      // Provider with edge-tts fallback
       try {
         if (provider === "openai") {
           return await speakOpenAI(filePath, params, vault, signal);

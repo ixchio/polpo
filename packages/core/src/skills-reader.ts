@@ -3,7 +3,7 @@
  *
  * Uses FileSystem abstraction so it works on any backend:
  *   - NodeFileSystem (self-hosted)
- *   - SandboxProxyFS (cloud, lazy)
+ *   - SandboxProxyFS (remote, lazy)
  *
  * Write operations (install, remove, create, assign) stay in the shell
  * because they use git clone, symlinks, and other Node-specific ops.
@@ -154,7 +154,7 @@ async function scanSkillsDir(fs: FileSystem, dir: string, source: SkillInfo["sou
 
 /**
  * Discover ALL available skills from the project's .polpo/skills/ directory.
- * Cloud version — no global ~/.polpo/ (not available in sandbox).
+ * Remote version — no global ~/.polpo/ (not available in sandbox).
  */
 export async function discoverSkills(
   fs: FileSystem,

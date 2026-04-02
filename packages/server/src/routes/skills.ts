@@ -2,8 +2,8 @@
  * Skill routes — discover, list, read, create, delete, assign/unassign.
  *
  * Uses FileSystem abstraction so it works on any backend:
- *   - NodeFileSystem (self-hosted)
- *   - SandboxProxyFS (cloud, lazy)
+ *   - NodeFileSystem (local)
+ *   - SandboxProxyFS (remote, lazy)
  *
  * Install from GitHub (git clone) is NOT included — that's shell-specific
  * and stays in the root src/server/routes/skills.ts.

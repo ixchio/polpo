@@ -4,7 +4,7 @@
  * Decouples tools from child_process so they can work on any backend:
  *   - NodeShell:          child_process.exec (self-hosted, default)
  *   - JustBashShell:      just-bash in-process (serverless, edge)
- *   - SandboxProxyShell:  Daytona sandbox.process proxy (cloud)
+ *   - SandboxProxyShell:  Remote sandbox process proxy
  */
 
 export interface Shell {

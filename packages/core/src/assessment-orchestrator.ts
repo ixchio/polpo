@@ -23,7 +23,7 @@ import { looksLikeQuestion, classifyAsQuestion } from "./question-detector.js";
  * OrchestratorContext (to avoid modifying the shared interface).
  *
  * Shell layer creates these from Node.js APIs (node:fs, node:path);
- * cloud/test environments can provide stubs or omit them.
+ * remote/test environments can provide stubs or omit them.
  */
 export interface AssessmentPorts {
   /** Check if a file path exists (sync). Maps to node:fs existsSync. */

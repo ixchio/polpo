@@ -4,8 +4,8 @@
  * Decouples tools from node:fs so they can work on any backend:
  *   - NodeFileSystem:     node:fs (self-hosted, default)
  *   - AgentFS:            SQLite virtual filesystem (future)
- *   - SandboxProxyFS:     Daytona sandbox.fs proxy (cloud)
- *   - S3/R2:              Object storage (future)
+ *   - SandboxProxyFS:     Remote sandbox filesystem proxy
+ *   - S3:                 Object storage adapter
  */
 
 export interface FileSystem {

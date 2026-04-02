@@ -29,7 +29,7 @@ export type {
   AddAgentRequest,
 } from "./server/index.js";
 
-// Route factories (for cloud data-plane wiring)
+// Route factories (for data-plane wiring)
 export {
   taskRoutes,
   missionRoutes,

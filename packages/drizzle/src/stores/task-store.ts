@@ -202,7 +202,7 @@ export class DrizzleTaskStore implements TaskStore {
     };
 
     // Execute directly without transaction.
-    // Neon HTTP driver doesn't support transactions, and
+    // Some HTTP drivers don't support transactions, and
     // SQLite better-sqlite3 transactions don't support async callbacks.
     // Individual upserts are idempotent — no transaction needed for correctness.
     await exec(this.db);

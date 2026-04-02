@@ -2,7 +2,7 @@
  * Spawner — abstraction for launching agent runner processes.
  *
  * Node.js uses NodeSpawner (child_process.spawn).
- * Cloud uses SandboxSpawner (Daytona sandbox).
+ * Remote environments use SandboxSpawner.
  *
  * Same pattern as FileSystem and Shell — pure interface in core,
  * runtime implementations in the shell layer.

@@ -974,7 +974,7 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
               await sessionStore.updateMessage(sessionId, assistantMsgId, "", safeToolCalls);
             }
           }
-          // Notify consumer (e.g. cloud metering) — fire-and-forget
+          // Notify consumer (e.g. metering) — fire-and-forget
           try {
             deps.onCompletionFinished?.({
               usage: totalUsage,
@@ -1277,7 +1277,7 @@ export function completionRoutes(getDeps: () => CompletionRouteDeps, apiKeys?: s
             await sessionStore.updateMessage(sessionId, assistantMsgId, "[Response interrupted]", safeToolCalls);
           }
         }
-        // Notify consumer (e.g. cloud metering) — fire-and-forget
+        // Notify consumer (e.g. metering) — fire-and-forget
         try {
           deps.onCompletionFinished?.({
             usage: totalUsage,

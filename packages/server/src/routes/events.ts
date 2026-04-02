@@ -39,7 +39,7 @@ const _sseEventStreamRoute = createRoute({
 
 /**
  * SSE streaming event routes.
- * Accepts any EventBridge implementation (self-hosted SSEBridge, cloud EventEmitter adapter, etc.)
+ * Accepts any EventBridge implementation (SSEBridge, EventEmitter adapter, etc.)
  */
 export function eventRoutes(bridge: EventBridge): OpenAPIHono {
   const app = new OpenAPIHono();

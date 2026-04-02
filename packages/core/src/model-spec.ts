@@ -3,7 +3,7 @@
  *
  * Parses "provider:model" or "provider/model" strings into { provider, modelId }.
  * Auto-infers provider from well-known model prefixes.
- * Used by both self-hosted (src/llm/pi-client.ts) and cloud (handler.ts).
+ * Used by any runtime.
  */
 
 export interface ParsedModelSpec {
@@ -93,7 +93,7 @@ export function parseModelSpec(spec?: string, fallback?: string): ParsedModelSpe
 
 /**
  * Map of known providers → environment variable name for API keys.
- * Used by both self-hosted and cloud for BYOK resolution.
+ * Used for provider API key resolution.
  */
 export const PROVIDER_ENV_MAP: Record<string, string> = {
   openai: "OPENAI_API_KEY",

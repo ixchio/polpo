@@ -4,7 +4,7 @@
  * Default implementation for self-hosted mode. Spawns runner as a detached
  * subprocess with config written to a temporary JSON file.
  *
- * Drop-in replacement pattern: swap with SandboxSpawner for cloud.
+ * Drop-in replacement pattern: swap with SandboxSpawner for remote execution.
  */
 import { join, dirname } from "node:path";
 import { mkdirSync, existsSync, writeFileSync } from "node:fs";

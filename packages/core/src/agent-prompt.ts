@@ -2,7 +2,7 @@
  * Build the system prompt for an agent.
  *
  * Pure logic — no runtime dependencies (Node.js, pi-ai, filesystem).
- * Used by both self-hosted (src/adapters/engine.ts) and cloud (handler.ts).
+ * Used by any runtime (self-hosted or managed).
  *
  * Includes: preamble, identity, responsibilities, tone, personality, hierarchy,
  * custom systemPrompt, and optionally skills (if provided).

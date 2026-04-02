@@ -34,7 +34,7 @@ function pathResolve(base: string, relative: string): string {
  * Runtime dependencies for the assessment pipeline.
  *
  * The shell layer (Node.js) provides NodeFileSystem + NodeShell.
- * The cloud layer provides SandboxProxyFS + SandboxProxyShell.
+ * Remote environments provide SandboxProxyFS + SandboxProxyShell.
  * Tests can provide mocks/stubs.
  */
 export interface AssessmentDeps {

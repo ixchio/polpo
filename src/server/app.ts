@@ -44,7 +44,7 @@ export interface AppOptions {
  * Single-orchestrator architecture — no project concept.
  *
  * Route factories receive explicit dependency thunks instead of pulling
- * from Hono context.  This lets the cloud data-plane wire stores directly
+ * from Hono context.  This lets consumers wire stores directly
  * without needing the full Orchestrator class.
  */
 export function createApp(orchestrator: Orchestrator, sseBridge: SSEBridge, opts?: AppOptions): OpenAPIHono {
@@ -153,8 +153,8 @@ export function createApp(orchestrator: Orchestrator, sseBridge: SSEBridge, opts
   //
   // Each route factory receives a thunk that returns its deps at request
   // time.  In the self-hosted case every thunk delegates to the same
-  // Orchestrator instance.  Cloud can supply different thunks that read
-  // from Neon stores directly.
+  // Orchestrator instance.  Consumers can supply different thunks that read
+  // from database stores directly.
 
   const o = orchestrator; // short alias
 
