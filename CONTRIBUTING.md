@@ -76,4 +76,4 @@ Use [GitHub Issues](https://github.com/lumea-labs/polpo/issues) with the bug rep
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the Apache License 2.0.

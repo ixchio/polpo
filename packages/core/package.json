@@ -217,7 +217,7 @@
     "dist",
     "README.md"
   ],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
     "polpo",
     "ai-agents",

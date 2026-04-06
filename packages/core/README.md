@@ -10,4 +10,4 @@ npm install @polpo-ai/core
 
 ## License
 
-MIT
+Apache 2.0

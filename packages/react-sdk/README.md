@@ -553,4 +553,4 @@ The SDK is optimized for performance:
 
 ## License
 
-MIT
+Apache 2.0

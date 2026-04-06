@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/polpo-ai"><img src="https://img.shields.io/npm/v/polpo-ai.svg" alt="npm" /></a>
   <a href="https://github.com/lumea-labs/polpo/actions/workflows/ci.yml"><img src="https://github.com/lumea-labs/polpo/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/lumea-labs/polpo/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT" /></a>
+  <a href="https://github.com/lumea-labs/polpo/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="Apache 2.0" /></a>
   <a href="https://discord.gg/6JHCYQHr"><img src="https://img.shields.io/discord/placeholder?label=discord" alt="Discord" /></a>
 </p>
 
@@ -197,4 +197,4 @@ Polpo Cloud is the managed version at [polpo.sh](https://polpo.sh). It uses the 
 
 ## License
 
-[MIT](LICENSE) -- Lumea Labs
+[Apache 2.0](LICENSE) -- Lumea Labs
