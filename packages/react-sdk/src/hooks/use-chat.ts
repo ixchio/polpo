@@ -12,6 +12,7 @@ import type {
   NavigateToPayload,
   OpenTabPayload,
   ToolCallEvent,
+  MessageSegment,
 } from "@polpo-ai/sdk";
 import { ChatCompletionStream } from "@polpo-ai/sdk";
 
@@ -184,6 +185,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
       let fullText = "";
       const toolCalls = new Map<string, ToolCallEvent>();
+      const segments: MessageSegment[] = [];
 
       for await (const chunk of stream) {
         // Capture session ID
@@ -197,15 +199,30 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         if (!choice) continue;
         let updated = false;
 
-        // Text content
+        // Text content — append to last text segment or create new one
         if (choice.delta.content) {
           fullText += choice.delta.content;
+          const lastSeg = segments[segments.length - 1];
+          if (lastSeg?.type === "text") {
+            lastSeg.content += choice.delta.content;
+          } else {
+            segments.push({ type: "text", content: choice.delta.content });
+          }
           updated = true;
         }
 
         // Tool call events (server-side tool execution)
         if (choice.tool_call) {
           toolCalls.set(choice.tool_call.id, choice.tool_call);
+          // Update existing segment or add new one
+          const existing = segments.find(
+            (s) => s.type === "tool_call" && s.toolCall.id === choice.tool_call!.id,
+          );
+          if (existing && existing.type === "tool_call") {
+            existing.toolCall = choice.tool_call;
+          } else {
+            segments.push({ type: "tool_call", toolCall: choice.tool_call });
+          }
           updated = true;
           optionsRef.current.onToolCall?.(choice.tool_call);
         }
@@ -214,9 +231,10 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         if (updated) {
           const content = fullText;
           const tc = toolCalls.size > 0 ? Array.from(toolCalls.values()) : undefined;
+          const segs = segments.length > 0 ? [...segments] : undefined;
           setMessages((prev) => [
             ...prev.slice(0, -1),
-            { id: assistantId, role: "assistant", content, ts: new Date().toISOString(), toolCalls: tc },
+            { id: assistantId, role: "assistant", content, ts: new Date().toISOString(), toolCalls: tc, segments: segs },
           ]);
           optionsRef.current.onUpdate?.();
         }

@@ -1193,6 +1193,11 @@ export interface ChatSession {
   agent?: string;
 }
 
+/** An ordered segment in the assistant message stream. */
+export type MessageSegment =
+  | { type: "text"; content: string }
+  | { type: "tool_call"; toolCall: ToolCallEvent };
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -1200,6 +1205,8 @@ export interface ChatMessage {
   ts: string;
   /** Tool calls executed during this assistant message (only for role=assistant) */
   toolCalls?: ToolCallEvent[];
+  /** Ordered segments preserving chronological interleaving of text and tool calls (assistant only). */
+  segments?: MessageSegment[];
 }
 
 // === Chat Completions types (OpenAI-compatible) ===
