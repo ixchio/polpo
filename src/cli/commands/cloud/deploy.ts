@@ -642,18 +642,36 @@ export function registerDeployCommand(program: Command): void {
       const includeRuns = opts.all || opts.includeRuns;
       const includeSessions = opts.all || opts.includeSessions;
 
-      console.log("  Resources:");
-      if (hasTeams) console.log("    Teams ........... yes");
-      if (hasAgents) console.log("    Agents .......... yes");
+      // Show detailed resource summary
+      console.log("  Resources to deploy:");
+      if (hasAgents) {
+        const agentsData = loadJson(path.join(polpoDir, "agents.json"));
+        if (Array.isArray(agentsData)) {
+          const names = agentsData.map((e: any) => (e.agent ?? e).name).filter(Boolean);
+          console.log(`    Agents .......... ${names.length} (${names.join(", ")})`);
+        }
+      }
+      if (hasTeams) {
+        const teamsData = loadJson(path.join(polpoDir, "teams.json"));
+        if (Array.isArray(teamsData)) {
+          console.log(`    Teams ........... ${teamsData.length} (${teamsData.map((t: any) => t.name).join(", ")})`);
+        }
+      }
       if (hasMemory) console.log("    Memory .......... yes");
-      if (hasMissions) console.log("    Missions ........ yes");
+      if (hasMissions) {
+        const n = fs.readdirSync(path.join(polpoDir, "missions")).filter(f => f.endsWith(".json")).length;
+        console.log(`    Missions ........ ${n}`);
+      }
       if (hasPlaybooks) console.log("    Playbooks ....... yes");
-      if (hasSkills) console.log("    Skills .......... yes");
+      if (hasSkills) {
+        const n = fs.readdirSync(path.join(polpoDir, "skills")).filter(
+          (d) => fs.statSync(path.join(polpoDir, "skills", d)).isDirectory()
+        ).length;
+        console.log(`    Skills .......... ${n}`);
+      }
       if (hasVault) console.log("    Vault ........... yes");
       if (hasAvatars) console.log("    Avatars ......... yes");
-      if (hasSessions) console.log("    Sessions ........ yes");
       if (includeTasks && hasTasks) console.log("    Tasks ........... yes");
-      if (includeRuns && hasRuns) console.log("    Runs ............ yes");
       if (includeSessions && hasSessions) console.log("    Sessions ........ yes");
       console.log("");
 
@@ -733,8 +751,14 @@ export function registerDeployCommand(program: Command): void {
 
 
       if (allErrors.length > 0) {
+        // Rewrite cryptic server errors to actionable CLI messages
+        const friendlyErrors = allErrors.map(err =>
+          err.includes("Multiple projects found")
+            ? err.replace(/Multiple projects found.*/, "Multiple projects found. Run: polpo projects set")
+            : err
+        );
         console.log("\n  Errors:");
-        for (const err of allErrors) console.log(`    - ${err}`);
+        for (const err of friendlyErrors) console.log(`    - ${err}`);
       }
 
       console.log(`\n  Deployed: ${summary.join(", ") || "nothing to deploy"}\n`);

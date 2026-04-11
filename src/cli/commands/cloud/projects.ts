@@ -2,8 +2,9 @@
  * polpo cloud projects — manage projects via session token auth.
  */
 import type { Command } from "commander";
-import { loadCredentials } from "./config.js";
+import { loadCredentials, saveCredentials } from "./config.js";
 import { createApiClient, type ApiClient } from "./api.js";
+import { isTTY, prompt } from "./prompt.js";
 
 /**
  * Fetch the user's first org ID. The server requires an orgId for
@@ -60,7 +61,8 @@ export function registerProjectsCommand(program: Command): void {
           } else {
             for (const p of list) {
               const status = p.status ? ` [${p.status}]` : "";
-              console.log(`  ${p.name ?? p.id}${status}`);
+              const active = p.id === creds.projectId ? " *" : "  ";
+              console.log(`${active}${p.name ?? p.id}${status}`);
             }
           }
         } else {
@@ -120,6 +122,85 @@ export function registerProjectsCommand(program: Command): void {
           );
           process.exit(1);
         }
+      } catch (err: any) {
+        console.error("Error: " + err.message);
+        process.exit(1);
+      }
+    });
+
+  projects
+    .command("set [name-or-id]")
+    .description("Select the active project for CLI commands")
+    .option("--org <org-id>", "Organization ID (auto-detected if omitted)")
+    .action(async (nameOrId: string | undefined, opts: any) => {
+      const creds = loadCredentials();
+      if (!creds) {
+        console.error("Not logged in. Run: polpo login --api-key <key>");
+        process.exit(1);
+      }
+
+      const client = createApiClient(creds);
+
+      try {
+        const orgId = opts.org ?? (await resolveOrgId(client));
+        const res = await client.get<any[]>(
+          `/v1/projects?orgId=${encodeURIComponent(orgId)}`,
+        );
+
+        if (res.status !== 200) {
+          console.error("Error fetching projects.");
+          process.exit(1);
+        }
+
+        const list = Array.isArray(res.data) ? res.data : [];
+        if (list.length === 0) {
+          console.error("No projects found. Create one first: polpo projects create <name>");
+          process.exit(1);
+        }
+
+        // Non-interactive: match by name or ID
+        if (nameOrId) {
+          const match = list.find((p: any) =>
+            p.id === nameOrId || p.name?.toLowerCase() === nameOrId.toLowerCase() || p.slug === nameOrId.toLowerCase()
+          );
+          if (!match) {
+            console.error(`  Project "${nameOrId}" not found.`);
+            console.error(`  Available: ${list.map((p: any) => p.name).join(", ")}`);
+            process.exit(1);
+          }
+          saveCredentials(creds.apiKey, creds.baseUrl, match.id);
+          console.log(`  Active project: ${match.name}`);
+          process.exit(0);
+        }
+
+        if (list.length === 1) {
+          saveCredentials(creds.apiKey, creds.baseUrl, list[0].id);
+          console.log(`  Active project: ${list[0].name} (only project)`);
+          process.exit(0);
+        }
+
+        // Multiple projects — show picker
+        console.log("\n  Select a project:\n");
+        for (let i = 0; i < list.length; i++) {
+          const current = list[i].id === creds.projectId ? " (current)" : "";
+          console.log(`    ${i + 1}. ${list[i].name}${current}`);
+        }
+        console.log();
+
+        if (!isTTY()) {
+          console.error("Multiple projects found. Pass project ID: polpo projects set --project <id>");
+          process.exit(1);
+        }
+
+        const answer = await prompt(`  Select (1-${list.length}): `);
+        const idx = parseInt(answer, 10) - 1;
+        if (idx < 0 || idx >= list.length) {
+          console.error("  Invalid selection.");
+          process.exit(1);
+        }
+
+        saveCredentials(creds.apiKey, creds.baseUrl, list[idx].id);
+        console.log(`\n  Active project: ${list[idx].name}\n`);
       } catch (err: any) {
         console.error("Error: " + err.message);
         process.exit(1);
