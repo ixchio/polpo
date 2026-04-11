@@ -75,7 +75,7 @@ export function isModelAllowed(spec: string): boolean {
   if (!modelAllowlist) return true;
   // Check exact match
   if (spec in modelAllowlist) return true;
-  // Check without provider prefix (e.g. "claude-opus-4.6" matches "anthropic:claude-opus-4.6")
+  // Check without provider prefix (e.g. "claude-opus-4.6" matches "anthropic/claude-opus-4.6")
   const { provider, modelId } = parseModelSpec(spec);
   const fullSpec = `${provider}:${modelId}`;
   return fullSpec in modelAllowlist;
@@ -316,7 +316,7 @@ export function listModels(provider?: string): ModelInfo[] {
  */
 export function buildModelListingForPrompt(): string {
   const lines: string[] = [
-    `Format: "provider:model" (e.g. "anthropic:claude-opus-4.6") or just "model" (auto-inferred from prefix).`,
+    `Format: "provider/model" (e.g. "anthropic/claude-opus-4.6") or just "model" (auto-inferred from prefix).`,
   ];
 
   const catalog = getCatalogSync();
@@ -361,7 +361,7 @@ export function buildModelListingForPrompt(): string {
   // Count totals
   const totalProviders = byProvider.size + Object.keys(providerOverrides).length;
   const totalModels = catalog.length;
-  lines.push(`- ... and ${totalProviders} total providers with ${totalModels}+ models (use "provider:model" format)`);
+  lines.push(`- ... and ${totalProviders} total providers with ${totalModels}+ models (use "provider/model" format)`);
   lines.push(`Configure your default model in .polpo/polpo.json or via the POLPO_MODEL env var.`);
 
   return lines.join("\n");

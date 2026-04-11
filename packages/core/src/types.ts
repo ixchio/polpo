@@ -240,7 +240,7 @@ export interface AgentConfig {
   /** ISO timestamp of when this agent was created / added to the team. Auto-set by addAgent(). */
   createdAt?: string;
   role?: string;
-  /** Model to use. Format: "provider:model" (e.g. "anthropic:claude-sonnet-4-5-20250929") or bare model ID (auto-inferred). */
+  /** Model to use. Format: "provider/model" (e.g. "anthropic/claude-sonnet-4-5-20250929") or bare model ID (auto-inferred). */
   model?: string;
   /** Allowed tools for the agent (e.g. ["read", "write", "edit", "bash", "glob", "grep", "browser_*", "email_*", "image_*", "video_*", "audio_*", "excel_*", "pdf_*", "docx_*"]).
    *  Core tools (always available): read, write, edit, bash, glob, grep, ls, http_fetch, http_download, register_outcome, vault_get, vault_list. */
@@ -625,7 +625,7 @@ export interface CustomModelDef {
 // === Model Config (primary + fallbacks) ===
 
 export interface ModelConfig {
-  /** Primary model spec (e.g. "anthropic:claude-opus-4-6"). */
+  /** Primary model spec (e.g. "anthropic/claude-opus-4-6"). */
   primary?: string;
   /** Ordered fallback models — tried when primary fails. */
   fallbacks?: string[];
@@ -675,12 +675,12 @@ export interface PolpoSettings {
    *  Skill names are resolved against the pool (project + global). */
   orchestratorSkills?: string[];
   /** Model for orchestrator LLM calls (question detection, deadlock, missions).
-   *  Can be a simple string ("anthropic:claude-opus-4-6") or a ModelConfig with fallbacks. */
+   *  Can be a simple string ("anthropic/claude-opus-4-6") or a ModelConfig with fallbacks. */
   orchestratorModel?: string | ModelConfig;
   /** Image-capable model for tasks that need vision (falls back to orchestratorModel). */
   imageModel?: string;
   /** Model allowlist — when set, only these models can be used.
-   *  Keys are model specs (e.g. "anthropic:claude-opus-4-6"), values are aliases/params. */
+   *  Keys are model specs (e.g. "anthropic/claude-opus-4-6"), values are aliases/params. */
   modelAllowlist?: Record<string, ModelAllowlistEntry>;
   /** Global reasoning / deep thinking level for orchestrator LLM calls (chat, plan generation, assessment).
    *  "off" disables thinking (default). Can be overridden per-agent via AgentConfig.reasoning.

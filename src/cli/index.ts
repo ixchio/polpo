@@ -55,8 +55,6 @@ import { registerConfigCommands } from "./commands/config.js";
 import { registerPlaybookCommands } from "./commands/playbook.js";
 import { registerSkillsCommands } from "./commands/skills.js";
 import { registerModelsCommands } from "./commands/models.js";
-// setup command removed — agents defined in files, not via wizard
-import { registerBrowserCommands } from "./commands/browser-profile.js";
 import { registerScheduleCommands } from "./commands/schedule.js";
 import { registerAgentOnboardCommands } from "./commands/agent-onboard.js";
 import { registerUpdateCommand } from "./commands/update.js";
@@ -561,8 +559,7 @@ registerConfigCommands(program);
 registerPlaybookCommands(program);
 registerSkillsCommands(program);
 registerModelsCommands(program);
-// registerSetupCommand removed
-registerBrowserCommands(program);
+// init, setup, browser-profile, chat removed
 registerScheduleCommands(program);
 registerAgentOnboardCommands(program);
 registerUpdateCommand(program);

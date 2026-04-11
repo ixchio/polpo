@@ -647,7 +647,7 @@ export type ReasoningLevel = "off" | "minimal" | "low" | "medium" | "high" | "xh
 
 /** Primary model with ordered fallbacks. */
 export interface ModelConfig {
-  /** Primary model spec (e.g. "anthropic:claude-opus-4-6"). */
+  /** Primary model spec (e.g. "anthropic/claude-opus-4-6"). */
   primary?: string;
   /** Ordered fallback models — tried when primary fails. */
   fallbacks?: string[];

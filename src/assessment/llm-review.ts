@@ -747,7 +747,7 @@ export async function runLLMReview(
   const criteria = expectation.criteria || "The work should be correct, well-structured, and meet the task requirements.";
   const threshold = expectation.threshold ?? 3.0;
 
-  const reviewModel = process.env.POLPO_JUDGE_MODEL || process.env.POLPO_MODEL || "anthropic:claude-sonnet-4.5";
+  const reviewModel = process.env.POLPO_JUDGE_MODEL || process.env.POLPO_MODEL || "anthropic/claude-sonnet-4.5";
 
   // Generate task-specific dimensions via LLM when not explicitly provided
   const dimensions = expectation.dimensions ?? await generateDimensions(context, reviewModel, onProgress);

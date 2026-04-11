@@ -178,11 +178,11 @@ export async function runSetupWizard(options?: SetupOptions): Promise<void> {
     if (idx >= 0 && idx < capped.length) {
       selectedModel = capped[idx].spec;
     } else {
-      const custom = await promptUser("  Model spec (provider:model): ");
+      const custom = await promptUser("  Model spec (provider/model): ");
       if (custom) selectedModel = custom;
     }
   } else {
-    const custom = await promptUser("  Model spec (provider:model): ");
+    const custom = await promptUser("  Model spec (provider/model): ");
     if (custom) selectedModel = custom;
   }
 

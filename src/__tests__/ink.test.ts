@@ -184,7 +184,7 @@ describe("validateInkAgent", () => {
     const result = validateInkAgent({
       name: "frontend-dev",
       role: "Frontend developer",
-      model: "anthropic:claude-sonnet-4-5-20250929",
+      model: "anthropic/claude-sonnet-4-5-20250929",
     });
     expect(result.valid).toBe(true);
   });
@@ -304,7 +304,7 @@ describe("discoverInkPackages", () => {
       JSON.stringify({
         name: "frontend-dev",
         role: "Frontend developer specializing in React",
-        model: "anthropic:claude-sonnet-4-5-20250929",
+        model: "anthropic/claude-sonnet-4-5-20250929",
         allowedTools: ["read", "write", "edit", "glob", "grep"],
         tags: ["frontend", "react"],
       }),

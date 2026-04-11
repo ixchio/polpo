@@ -1,7 +1,7 @@
 /**
  * Model spec parsing — pure logic, no runtime dependencies.
  *
- * Parses "provider:model" or "provider/model" strings into { provider, modelId }.
+ * Parses "provider/model" or "provider/model" strings into { provider, modelId }.
  * Auto-infers provider from well-known model prefixes.
  * Used by any runtime.
  */
@@ -42,7 +42,7 @@ const PREFIX_MAP: [string, string][] = [
  * Parse a model spec string into { provider, modelId }.
  *
  * Supported formats:
- *   "provider:model"  — explicit (e.g. "anthropic:claude-opus-4-6")
+ *   "provider/model"  — explicit (e.g. "anthropic/claude-opus-4-6")
  *   "provider/model"  — slash format (e.g. "anthropic/claude-opus-4-6")
  *   "model-id"        — auto-inferred from prefix map
  *
@@ -54,11 +54,11 @@ export function parseModelSpec(spec?: string, fallback?: string): ParsedModelSpe
   const s = spec || fallback;
   if (!s) {
     throw new Error(
-      'No model configured. Use "provider:model" format (e.g. "anthropic:claude-sonnet-4-5").'
+      'No model configured. Use "provider/model" format (e.g. "anthropic/claude-sonnet-4-5").'
     );
   }
 
-  // Explicit "provider:model" format
+  // Explicit "provider/model" format
   const colonIdx = s.indexOf(":");
   if (colonIdx > 0) {
     const provider = s.slice(0, colonIdx);
@@ -87,7 +87,7 @@ export function parseModelSpec(spec?: string, fallback?: string): ParsedModelSpe
   }
 
   throw new Error(
-    `Cannot infer provider for model "${s}". Use "provider:model" format (e.g. "anthropic:${s}").`
+    `Cannot infer provider for model "${s}". Use "provider/model" format (e.g. "anthropic:${s}").`
   );
 }
 

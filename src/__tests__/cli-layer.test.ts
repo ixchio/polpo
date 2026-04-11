@@ -207,7 +207,7 @@ describe("CLI layer: team commands", () => {
 
   test("team add — adds an agent", async () => {
     const { stdout } = await runCLI(registerTeamCommands, [
-      "team", "add", "agent-2", "-d", dir, "-r", "Backend developer", "-m", "anthropic:claude-sonnet-4-6",
+      "team", "add", "agent-2", "-d", dir, "-r", "Backend developer", "-m", "anthropic/claude-sonnet-4-6",
     ]);
     expect(stdout).toContain('Added agent "agent-2"');
 
@@ -218,7 +218,7 @@ describe("CLI layer: team commands", () => {
     const entry = agents.find((e: any) => e.agent.name === "agent-2");
     expect(entry).toBeDefined();
     expect(entry.agent.role).toBe("Backend developer");
-    expect(entry.agent.model).toBe("anthropic:claude-sonnet-4-6");
+    expect(entry.agent.model).toBe("anthropic/claude-sonnet-4-6");
   });
 
   test("team add — duplicate agent errors", async () => {
