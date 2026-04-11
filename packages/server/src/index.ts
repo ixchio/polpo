@@ -41,6 +41,9 @@ export type {
   AgentRouteDeps,
 } from "./deps.js";
 
+// Validation schemas (Zod — reusable by CLI for pre-flight validation)
+export { AddAgentSchema, UpdateAgentSchema, RenameTeamSchema } from "./schemas.js";
+
 // Playbook utilities (pure logic, edge-compatible)
 export { validateParams, instantiatePlaybook } from "./playbook-utils.js";
 export type { PlaybookParameter, PlaybookDefinition, ValidationResult } from "./playbook-utils.js";

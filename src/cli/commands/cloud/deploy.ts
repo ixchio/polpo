@@ -23,6 +23,19 @@ import { loadCredentials, saveCredentials } from "./config.js";
 import { createApiClient, type ApiClient } from "./api.js";
 import { isTTY, confirm } from "./prompt.js";
 import { resolveKey, decrypt } from "@polpo-ai/vault-crypto";
+import { AddAgentSchema } from "@polpo-ai/server";
+
+// ── Deploy result tracking ──────────────────────────────
+interface DeployResult {
+  created: number;
+  updated: number;
+  failed: number;
+  errors: string[];
+}
+
+function emptyResult(): DeployResult {
+  return { created: 0, updated: 0, failed: 0, errors: [] };
+}
 
 function resolvePolpoDir(dir: string): string {
   const polpoDir = path.resolve(dir, ".polpo");
@@ -55,34 +68,94 @@ function listJsonFiles(dir: string): string[] {
 
 // ── Core deployers ──────────────────────────────────────
 
-async function deployTeams(client: ApiClient, polpoDir: string): Promise<number> {
+async function deployTeams(client: ApiClient, polpoDir: string): Promise<DeployResult> {
+  const result = emptyResult();
   const teams = loadJson(path.join(polpoDir, "teams.json"));
-  if (!teams || !Array.isArray(teams)) return 0;
-  let count = 0;
-  for (const team of teams) {
-    try {
-      await client.post("/v1/agents/teams", { name: team.name, description: team.description });
-      count++;
-    } catch { /* team may already exist */ }
-  }
-  return count;
-}
+  if (!teams || !Array.isArray(teams)) return result;
 
-async function deployAgents(client: ApiClient, polpoDir: string): Promise<number> {
-  const agents = loadJson(path.join(polpoDir, "agents.json"));
-  if (!agents || !Array.isArray(agents)) return 0;
-  let count = 0;
-  for (const entry of agents) {
-    const agent = entry.agent ?? entry;
-    const teamName = entry.teamName ?? "default";
-    try {
-      await client.post("/v1/agents", { ...agent, team: teamName });
-      count++;
-    } catch (err: any) {
-      console.error(`  Warning: agent "${agent.name}": ${err.message}`);
+  for (const team of teams) {
+    if (!team.name || typeof team.name !== "string") {
+      result.errors.push(`team missing "name" field`);
+      result.failed++;
+      continue;
+    }
+    const res = await client.post("/v1/agents/teams", { name: team.name, description: team.description });
+    if (res.status >= 200 && res.status < 300) {
+      result.created++;
+    } else if (res.status === 409 || (res.data as any)?.error?.includes("already exists")) {
+      // Team exists — that's fine, skip
+    } else {
+      const msg = (res.data as any)?.error ?? `HTTP ${res.status}`;
+      result.errors.push(`team "${team.name}": ${msg}`);
+      result.failed++;
     }
   }
-  return count;
+  return result;
+}
+
+async function deployAgents(client: ApiClient, polpoDir: string, force: boolean): Promise<DeployResult> {
+  const result = emptyResult();
+  const raw = loadJson(path.join(polpoDir, "agents.json"));
+  if (!raw || !Array.isArray(raw)) {
+    if (raw && !Array.isArray(raw)) {
+      result.errors.push("agents.json must be a JSON array, e.g. [{ \"agent\": { \"name\": \"...\", ... }, \"teamName\": \"default\" }]");
+      result.failed++;
+    }
+    return result;
+  }
+
+  // Fetch existing agents for upsert detection
+  let existingNames = new Set<string>();
+  try {
+    const res = await client.get<any>("/v1/agents");
+    if (res.status === 200) {
+      const data = res.data?.data ?? res.data ?? [];
+      if (Array.isArray(data)) existingNames = new Set(data.map((a: any) => a.name));
+    }
+  } catch { /* can't check — will try create */ }
+
+  for (const entry of raw) {
+    const agent = entry.agent ?? entry;
+    const teamName = entry.teamName ?? "default";
+
+    // Validate agent schema
+    const parsed = AddAgentSchema.safeParse(agent);
+    if (!parsed.success) {
+      const issues = parsed.error.issues.map((i: any) => `${i.path.join(".")}: ${i.message}`).join(", ");
+      result.errors.push(`agent "${agent.name ?? "unknown"}": ${issues}`);
+      result.failed++;
+      continue;
+    }
+
+    const exists = existingNames.has(agent.name);
+
+    if (exists) {
+      // Update existing agent
+      if (!force && isTTY()) {
+        const ok = await confirm(`  Agent "${agent.name}" already exists. Override?`);
+        if (!ok) continue;
+      }
+      const res = await client.put(`/v1/agents/${encodeURIComponent(agent.name)}`, { ...agent, team: teamName });
+      if (res.status >= 200 && res.status < 300) {
+        result.updated++;
+      } else {
+        const msg = (res.data as any)?.error ?? `HTTP ${res.status}`;
+        result.errors.push(`agent "${agent.name}": update failed — ${msg}`);
+        result.failed++;
+      }
+    } else {
+      // Create new agent
+      const res = await client.post("/v1/agents", { ...agent, team: teamName });
+      if (res.status >= 200 && res.status < 300) {
+        result.created++;
+      } else {
+        const msg = (res.data as any)?.error ?? `HTTP ${res.status}`;
+        result.errors.push(`agent "${agent.name}": create failed — ${msg}`);
+        result.failed++;
+      }
+    }
+  }
+  return result;
 }
 
 async function deployMemory(client: ApiClient, polpoDir: string): Promise<number> {
@@ -410,8 +483,9 @@ export function registerDeployCommand(program: Command): void {
   program
     .command("deploy")
     .description("Deploy local .polpo/ project to cloud")
-    .option("--dir <path>", "Project directory", ".")
-    .option("--yes", "Skip confirmation prompt")
+    .option("-d, --dir <path>", "Project directory", ".")
+    .option("-y, --yes", "Skip confirmation prompt")
+    .option("-f, --force", "Force override existing resources without asking")
     .option("--include-tasks", "Also deploy tasks")
     .option("--include-runs", "Also deploy run records (migration)")
     .option("--include-sessions", "Also deploy chat sessions (migration)")
@@ -593,67 +667,81 @@ export function registerDeployCommand(program: Command): void {
       }
 
       // ── Step 4: Deploy ────────────────────────
+      const force = opts.force || false;
       console.log("  Deploying...");
-      const results: string[] = [];
+      const summary: string[] = [];
+      const allErrors: string[] = [];
 
       if (hasTeams) {
-        const n = await deployTeams(client, polpoDir);
-        if (n > 0) results.push(`${n} team(s)`);
+        const r = await deployTeams(client, polpoDir);
+        if (r.created > 0) summary.push(`${r.created} team(s) created`);
+        if (r.failed > 0) allErrors.push(...r.errors);
       }
 
       if (hasAgents) {
-        const n = await deployAgents(client, polpoDir);
-        if (n > 0) results.push(`${n} agent(s)`);
+        const r = await deployAgents(client, polpoDir, force);
+        if (r.created > 0) summary.push(`${r.created} agent(s) created`);
+        if (r.updated > 0) summary.push(`${r.updated} agent(s) updated`);
+        if (r.failed > 0) allErrors.push(...r.errors);
       }
 
       if (hasMemory) {
         const n = await deployMemory(client, polpoDir);
-        if (n > 0) results.push(`${n} memory file(s)`);
+        if (n > 0) summary.push(`${n} memory file(s)`);
       }
 
       if (hasMissions) {
         const n = await deployMissions(client, polpoDir);
-        if (n > 0) results.push(`${n} mission(s)`);
+        if (n > 0) summary.push(`${n} mission(s)`);
       }
 
       if (hasPlaybooks) {
         const n = await deployPlaybooks(client, polpoDir);
-        if (n > 0) results.push(`${n} playbook(s)`);
+        if (n > 0) summary.push(`${n} playbook(s)`);
       }
 
       if (hasSkills) {
         const n = await deploySkills(client, polpoDir);
-        if (n > 0) results.push(`${n} skill(s)`);
+        if (n > 0) summary.push(`${n} skill(s)`);
       }
 
       if (hasVault) {
         const n = await deployVault(client, polpoDir);
-        if (n > 0) results.push(`${n} vault entry(ies)`);
+        if (n > 0) summary.push(`${n} vault entry(ies)`);
       }
 
       if (hasAvatars) {
         const n = await deployAvatars(client, polpoDir, creds.baseUrl, creds.apiKey);
-        if (n > 0) results.push(`${n} avatar(s)`);
+        if (n > 0) summary.push(`${n} avatar(s)`);
       }
 
       if (hasSessions) {
         const n = await deploySessions(client, polpoDir);
-        if (n > 0) results.push(`${n} session(s)`);
+        if (n > 0) summary.push(`${n} session(s)`);
       }
 
       // Deploy opt-in
       if (includeTasks && hasTasks) {
         const n = await deployTasks(client, polpoDir);
-        if (n > 0) results.push(`${n} task(s)`);
+        if (n > 0) summary.push(`${n} task(s)`);
       }
 
       if (includeRuns && hasRuns) {
         const n = await deployRuns(client, polpoDir);
-        if (n > 0) results.push(`${n} run(s) (skipped — needs import API)`);
+        if (n > 0) summary.push(`${n} run(s) (skipped — needs import API)`);
       }
 
 
-      console.log(`\n  Deployed: ${results.join(", ") || "nothing to deploy"}\n`);
+      if (allErrors.length > 0) {
+        console.log("\n  Errors:");
+        for (const err of allErrors) console.log(`    - ${err}`);
+      }
+
+      console.log(`\n  Deployed: ${summary.join(", ") || "nothing to deploy"}\n`);
+
+      if (allErrors.length > 0) {
+        process.exit(1);
+      }
 
       // Exit explicitly — open HTTP connections from fetch keep the event loop alive
       process.exit(0);
