@@ -114,23 +114,7 @@ describe("CLI standalone (no server)", () => {
     expect(Array.isArray(parsed)).toBe(true);
   });
 
-  it("polpo init --dir <new-dir> — creates .polpo/ directory", async () => {
-    const initDir = await mkdtemp(join(tmpdir(), "polpo-cli-init-"));
-    try {
-      // init launches a setup wizard interactively — pipe stdin to avoid hang.
-      // We use execFile with stdin closed so it falls through to the non-interactive fallback.
-      const r = await run(["init", "--dir", initDir], { timeout: 15_000 });
-      // init may exit 0 or may error if it requires interactive input.
-      // Either way, it should have created the .polpo directory.
-      const entries = await readdir(join(initDir, ".polpo")).catch(() => [] as string[]);
-      expect(entries.length).toBeGreaterThanOrEqual(0);
-      // The .polpo directory itself should exist
-      const polpoDirExists = await readdir(initDir).then(e => e.includes(".polpo"));
-      expect(polpoDirExists).toBe(true);
-    } finally {
-      await rm(initDir, { recursive: true, force: true });
-    }
-  });
+  // polpo init removed — agents are defined in files directly
 });
 
 // =====================================================================
