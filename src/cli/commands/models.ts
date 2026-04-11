@@ -66,13 +66,10 @@ export function registerModelsCommands(parent: Command): void {
 
       for (const [provider, models] of byProvider) {
         console.log(`  ${chalk.bold(provider)} (${models.length})`);
-        for (const m of models.slice(0, 10)) {
+        for (const m of models) {
           const ctx = m.context_window ? chalk.dim(` ${(m.context_window / 1000).toFixed(0)}k`) : "";
           const price = m.pricing ? chalk.dim(` $${m.pricing.input}/$${m.pricing.output}`) : "";
           console.log(`    ${m.id}${ctx}${price}`);
-        }
-        if (models.length > 10) {
-          console.log(chalk.dim(`    ... and ${models.length - 10} more`));
         }
         console.log();
       }

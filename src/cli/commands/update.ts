@@ -70,10 +70,16 @@ export function registerUpdateCommand(program: Command): void {
         }
 
         const pm = detectPackageManager();
+
+        // Clear cache to avoid stale versions
+        try {
+          if (pm === "npm") execSync("npm cache clean --force", { stdio: "ignore", timeout: 30_000 });
+        } catch { /* best effort */ }
+
         const cmd =
           pm === "pnpm"
-            ? "pnpm add -g polpo-ai@latest"
-            : "npm install -g polpo-ai@latest --force";
+            ? `pnpm add -g polpo-ai@${latest}`
+            : `npm install -g polpo-ai@${latest}`;
 
         console.log(chalk.dim(`\n  Updating via ${pm}...`));
         console.log(chalk.dim(`  $ ${cmd}\n`));
