@@ -4,23 +4,23 @@
 import type { Command } from "commander";
 import { loadCredentials } from "./config.js";
 import { createApiClient } from "./api.js";
+import { loadProjectId } from "./project-context.js";
 
 export function registerStatusCommand(program: Command): void {
   program
     .command("cloud-status")
     .description("Show project status summary")
-    .action(async () => {
+    .option("-d, --dir <path>", "Project directory", ".")
+    .action(async (opts) => {
       const creds = loadCredentials();
       if (!creds) {
-        console.error(
-          "Not logged in. Run: polpo login --api-key <key>",
-        );
+        console.error("Not logged in. Run: polpo login --api-key <key>");
         process.exit(1);
       }
 
-      const client = createApiClient(creds);
+      const projectId = loadProjectId(opts.dir);
+      const client = createApiClient(creds, projectId);
 
-      // Fetch tasks
       let taskSummary = "";
       try {
         const res = await client.get<any>("/v1/tasks");
@@ -28,55 +28,51 @@ export function registerStatusCommand(program: Command): void {
           const tasks = res.data?.data ?? res.data ?? [];
           const byStatus: Record<string, number> = {};
           for (const t of Array.isArray(tasks) ? tasks : []) {
-            const s = t.status ?? "unknown";
-            byStatus[s] = (byStatus[s] ?? 0) + 1;
+            byStatus[t.status ?? "unknown"] = (byStatus[t.status ?? "unknown"] ?? 0) + 1;
           }
           const total = Array.isArray(tasks) ? tasks.length : 0;
-          const parts = Object.entries(byStatus)
-            .map(([s, c]) => `${s}: ${c}`)
-            .join(", ");
+          const parts = Object.entries(byStatus).map(([s, c]) => `${s}: ${c}`).join(", ");
           taskSummary = `Tasks: ${total}${parts ? " (" + parts + ")" : ""}`;
+        } else if (res.status === 401) {
+          taskSummary = "Tasks: session expired — run: polpo login";
         } else {
-          taskSummary = "Tasks: error fetching";
+          taskSummary = `Tasks: error (HTTP ${res.status})`;
         }
-      } catch {
-        taskSummary = "Tasks: unavailable";
-      }
+      } catch { taskSummary = "Tasks: unavailable"; }
 
-      // Fetch agents
       let agentSummary = "";
       try {
         const res = await client.get<any>("/v1/agents");
         if (res.status === 200) {
           const agents = res.data?.data ?? res.data ?? [];
           const count = Array.isArray(agents) ? agents.length : 0;
-          agentSummary = `Agents: ${count}`;
+          const names = Array.isArray(agents) ? agents.map((a: any) => a.name).join(", ") : "";
+          agentSummary = count > 0 ? `Agents: ${count} (${names})` : "Agents: 0";
+        } else if (res.status === 401) {
+          agentSummary = "Agents: session expired — run: polpo login";
         } else {
-          agentSummary = "Agents: error fetching";
+          agentSummary = `Agents: error (HTTP ${res.status})`;
         }
-      } catch {
-        agentSummary = "Agents: unavailable";
-      }
+      } catch { agentSummary = "Agents: unavailable"; }
 
-      // Fetch missions
       let missionSummary = "";
       try {
         const res = await client.get<any>("/v1/missions");
         if (res.status === 200) {
           const missions = res.data?.data ?? res.data ?? [];
-          const count = Array.isArray(missions) ? missions.length : 0;
-          missionSummary = `Missions: ${count}`;
+          missionSummary = `Missions: ${Array.isArray(missions) ? missions.length : 0}`;
+        } else if (res.status === 401) {
+          missionSummary = "Missions: session expired — run: polpo login";
         } else {
-          missionSummary = "Missions: error fetching";
+          missionSummary = `Missions: error (HTTP ${res.status})`;
         }
-      } catch {
-        missionSummary = "Missions: unavailable";
-      }
+      } catch { missionSummary = "Missions: unavailable"; }
 
-      console.log("Project Status");
-      console.log("==============");
-      console.log(taskSummary);
-      console.log(agentSummary);
-      console.log(missionSummary);
+      console.log("\n  Project Status");
+      console.log("  ==============");
+      console.log(`  ${taskSummary}`);
+      console.log(`  ${agentSummary}`);
+      console.log(`  ${missionSummary}`);
+      console.log();
     });
 }

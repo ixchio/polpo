@@ -17,12 +17,13 @@ export interface ApiClient {
   delete<T = unknown>(path: string): Promise<ApiResponse<T>>;
 }
 
-export function createApiClient(credentials: Credentials): ApiClient {
+export function createApiClient(credentials: Credentials, projectId?: string): ApiClient {
   const { apiKey, baseUrl } = credentials;
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${apiKey}`,
     "Content-Type": "application/json",
+    ...(projectId ? { "x-project-id": projectId } : {}),
   };
 
   async function request<T>(

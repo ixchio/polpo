@@ -4,12 +4,14 @@
 import type { Command } from "commander";
 import { loadCredentials } from "./config.js";
 import { createApiClient } from "./api.js";
+import { loadProjectId } from "./project-context.js";
 
 export function registerLogsCommand(program: Command): void {
   program
     .command("cloud-logs")
     .description("View logs or follow live events")
     .option("--follow", "Follow live events via SSE")
+    .option("-d, --dir <path>", "Project directory", ".")
     .action(async (opts) => {
       const creds = loadCredentials();
       if (!creds) {
@@ -19,15 +21,18 @@ export function registerLogsCommand(program: Command): void {
         process.exit(1);
       }
 
+      const projectId = loadProjectId(opts.dir);
+
       if (opts.follow) {
         // SSE streaming
         const url = `${creds.baseUrl.replace(/\/$/, "")}/v1/events`;
         try {
-          const res = await fetch(url, {
-            headers: {
-              Authorization: `Bearer ${creds.apiKey}`,
-              Accept: "text/event-stream",
-            },
+          const sseHeaders: Record<string, string> = {
+            Authorization: `Bearer ${creds.apiKey}`,
+            Accept: "text/event-stream",
+          };
+          if (projectId) sseHeaders["x-project-id"] = projectId;
+          const res = await fetch(url, { headers: sseHeaders,
           });
 
           if (!res.ok) {
@@ -76,7 +81,7 @@ export function registerLogsCommand(program: Command): void {
         }
       } else {
         // Fetch recent logs
-        const client = createApiClient(creds);
+        const client = createApiClient(creds, projectId);
 
         try {
           const res = await client.get<any>("/v1/state/logs");

@@ -9,7 +9,7 @@ if (major < 20) {
 }
 
 import { resolve, dirname } from "node:path";
-import { mkdir, access, readFile } from "node:fs/promises";
+// fs/promises no longer needed (init removed)
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
@@ -55,7 +55,7 @@ import { registerConfigCommands } from "./commands/config.js";
 import { registerPlaybookCommands } from "./commands/playbook.js";
 import { registerSkillsCommands } from "./commands/skills.js";
 import { registerModelsCommands } from "./commands/models.js";
-import { registerSetupCommand } from "./commands/setup.js";
+// setup command removed — agents defined in files, not via wizard
 import { registerBrowserCommands } from "./commands/browser-profile.js";
 import { registerScheduleCommands } from "./commands/schedule.js";
 import { registerAgentOnboardCommands } from "./commands/agent-onboard.js";
@@ -68,7 +68,7 @@ import { registerByokCommand } from "./commands/cloud/byok.js";
 import { registerProjectsCommand } from "./commands/cloud/projects.js";
 import { registerStatusCommand as registerCloudStatusCommand } from "./commands/cloud/status.js";
 import { registerLogsCommand as registerCloudLogsCommand } from "./commands/cloud/logs.js";
-import { ensureSetup } from "./ensure-setup.js";
+// ensureSetup removed — no longer gating on polpo.json
 import { startUpdateCheck } from "./update-check.js";
 
 /** Wire orchestrator events to console output with chalk formatting. */
@@ -196,7 +196,6 @@ function _buildLogo(center = false): string {
   }).join("\n") + "\n";
 }
 const LOGO = _buildLogo(false);
-const LOGO_CENTER = () => _buildLogo(true);
 
 const LOGO_MINI = `  ${chalk.bold.white("🐙 P O L P O")}  `;
 
@@ -269,36 +268,7 @@ program
   .option("--cors-origins <origins>", "Comma-separated allowed CORS origins (env: POLPO_CORS_ORIGINS)")
   .action(serveAction);
 
-// polpo init
-program
-  .command("init")
-  .description("Initialize Polpo in the current project")
-  .option("-d, --dir <path>", "Working directory", ".")
-  .action(async (opts) => {
-    console.log(LOGO_CENTER());
-
-    const workDir = resolve(opts.dir);
-    const polpoDir = getPolpoDir(workDir);
-
-    await mkdir(polpoDir, { recursive: true });
-    await mkdir(resolve(polpoDir, "logs"), { recursive: true });
-    await mkdir(resolve(polpoDir, "assessments"), { recursive: true });
-
-    // Create .polpo/polpo.json via setup wizard (or non-interactive fallback)
-    const polpoJsonPath = resolve(polpoDir, "polpo.json");
-    try {
-      await access(polpoJsonPath);
-      console.log(chalk.yellow("  .polpo/polpo.json already exists."));
-      console.log(chalk.dim("  Run 'polpo setup' to reconfigure.\n"));
-    } catch {
-      const { runSetupWizard } = await import("./commands/setup.js");
-      await runSetupWizard({ polpoDir, workDir });
-    }
-
-    console.log(chalk.green("\n  Polpo initialized!"));
-    console.log(chalk.dim("\n  Local development:  polpo start"));
-    console.log(chalk.dim("  Cloud deployment:   polpo login && polpo deploy\n"));
-  });
+// polpo init — removed. Create .polpo/agents.json directly or let your coding agent do it.
 
 // polpo run
 program
@@ -591,7 +561,7 @@ registerConfigCommands(program);
 registerPlaybookCommands(program);
 registerSkillsCommands(program);
 registerModelsCommands(program);
-registerSetupCommand(program);
+// registerSetupCommand removed
 registerBrowserCommands(program);
 registerScheduleCommands(program);
 registerAgentOnboardCommands(program);

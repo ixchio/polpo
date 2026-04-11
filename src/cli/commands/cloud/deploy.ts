@@ -476,26 +476,27 @@ export function registerDeployCommand(program: Command): void {
       }
 
       const polpoDir = resolvePolpoDir(opts.dir);
-      const client = createApiClient(creds);
       const polpoConfig = loadJson(path.join(polpoDir, "polpo.json"));
       const projectName = polpoConfig?.project ?? path.basename(path.resolve(opts.dir));
       const force = opts.force || opts.yes || false;
 
+      // Control plane client (no project context needed for orgs/projects)
+      const cpClient = createApiClient(creds);
+
       console.log("\n  Polpo Deploy\n");
 
       // ── Step 1: Resolve project ────────────────────────
-      // Read projectId from local polpo.json
       let projectId: string | undefined = polpoConfig?.projectId;
       let orgId: string | undefined;
 
       if (!projectId) {
         try {
-          const orgsRes = await client.get<any>("/v1/orgs");
+          const orgsRes = await cpClient.get<any>("/v1/orgs");
           const orgs = Array.isArray(orgsRes.data) ? orgsRes.data : [];
           if (orgs.length > 0) {
             orgId = orgs[0].id;
 
-            const projRes = await client.get<any>(`/v1/projects?orgId=${orgId}`);
+            const projRes = await cpClient.get<any>(`/v1/projects?orgId=${orgId}`);
             const projects = Array.isArray(projRes.data) ? projRes.data : [];
             const existing = projects.find((p: any) =>
               p.name?.toLowerCase() === projectName.toLowerCase() ||
@@ -509,7 +510,7 @@ export function registerDeployCommand(program: Command): void {
               const slug = projectName.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
               const ok = force ? true : await confirm(`  Project "${projectName}" not found. Create it?`);
               if (ok) {
-                const createRes = await client.post<any>("/v1/projects", { name: projectName, slug, orgId });
+                const createRes = await cpClient.post<any>("/v1/projects", { name: projectName, slug, orgId })
                 projectId = createRes.data?.id;
                 console.log(`\n  Project: ${projectName} (created)\n`);
               } else {
@@ -529,9 +530,12 @@ export function registerDeployCommand(program: Command): void {
       }
 
       if (!projectId) {
-        console.error("  No project resolved. Run: polpo projects set");
+        console.error("  No project resolved. Deploy from a project directory with .polpo/polpo.json");
         process.exit(1);
       }
+
+      // Data plane client — always sends x-project-id
+      const client = createApiClient(creds, projectId);
 
       // Save projectId in local polpo.json for future deploys
       if (projectId && polpoConfig && !polpoConfig.projectId) {
@@ -589,7 +593,7 @@ export function registerDeployCommand(program: Command): void {
           if (push) {
             let n = 0;
             for (const { provider, value } of detected) {
-              try { await client.post("/v1/byok", { provider, key: value }); n++; } catch {}
+              try { await cpClient.post("/v1/byok", { provider, key: value }); n++; } catch {}
             }
             if (n > 0) console.log(`  Pushed ${n} LLM key(s)\n`);
           } else {
