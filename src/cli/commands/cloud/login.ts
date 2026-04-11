@@ -1,12 +1,13 @@
 /**
  * polpo login — authenticate with the Polpo Cloud API.
  *
- * Default: browser-based flow (opens browser, user approves, CLI gets API key).
+ * Default: browser-based flow (opens browser, user approves, CLI gets session token).
  * Fallback: --api-key for CI/CD and headless environments.
  */
 import type { Command } from "commander";
-import { saveCredentials } from "./config.js";
-import { isTTY, promptMasked } from "./prompt.js";
+import { loadCredentials, saveCredentials } from "./config.js";
+import { createApiClient } from "./api.js";
+import { isTTY, promptMasked, confirm } from "./prompt.js";
 
 const DEFAULT_API_URL = "https://api.polpo.sh";
 const DEFAULT_DASHBOARD_URL = "https://polpo.sh";
@@ -23,6 +24,26 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** After login, try to auto-resolve the project if user has exactly one. */
+async function autoResolveProject(apiKey: string, baseUrl: string): Promise<void> {
+  try {
+    const client = createApiClient({ apiKey, baseUrl });
+    const orgsRes = await client.get<any[]>("/v1/orgs");
+    const orgs = Array.isArray(orgsRes.data) ? orgsRes.data : [];
+    if (orgs.length === 0) return;
+
+    const projRes = await client.get<any[]>(`/v1/projects?orgId=${orgs[0].id}`);
+    const projects = Array.isArray(projRes.data) ? projRes.data : [];
+
+    if (projects.length === 1) {
+      saveCredentials(apiKey, baseUrl, projects[0].id);
+      console.log(`  Project: ${projects[0].name} (auto-selected)`);
+    } else if (projects.length > 1) {
+      console.log(`  ${projects.length} projects found. Run: polpo projects set`);
+    }
+  } catch { /* best effort */ }
+}
+
 export function registerLoginCommand(program: Command): void {
   program
     .command("login")
@@ -35,20 +56,43 @@ export function registerLoginCommand(program: Command): void {
       const baseUrl: string = opts.url ?? DEFAULT_API_URL;
       const dashboardUrl: string = opts.dashboardUrl ?? DEFAULT_DASHBOARD_URL;
 
+      // Check if already logged in
+      const existing = loadCredentials();
+      if (existing && isTTY() && !opts.apiKey) {
+        const ok = await confirm("  Already logged in. Re-authenticate?");
+        if (!ok) return;
+      }
+
       // --- Direct API key flow ---
       if (opts.apiKey) {
+        // Validate the key before saving
+        console.log("  Validating API key...");
+        try {
+          const client = createApiClient({ apiKey: opts.apiKey, baseUrl });
+          const res = await client.get<any>("/v1/orgs");
+          if (res.status === 401 || res.status === 403) {
+            console.error("  Error: Invalid API key. Check the key and try again.");
+            process.exit(1);
+          }
+        } catch (err: any) {
+          console.error(`  Error: Could not reach the API at ${baseUrl}`);
+          console.error(`  ${err.message}`);
+          process.exit(1);
+        }
+
         saveCredentials(opts.apiKey, baseUrl);
-        console.log("Credentials saved.");
+        console.log("  Credentials saved.");
+        await autoResolveProject(opts.apiKey, baseUrl);
+        console.log();
         return;
       }
 
       // --- Non-TTY: require --api-key ---
       if (!isTTY()) {
-        // Try interactive prompt as last resort
         const key = await promptMasked("API key: ").catch(() => null);
         if (key) {
           saveCredentials(key, baseUrl);
-          console.log("Credentials saved.");
+          console.log("  Credentials saved.");
           return;
         }
         console.error("Error: --api-key is required in non-interactive mode.");
@@ -59,7 +103,6 @@ export function registerLoginCommand(program: Command): void {
       // --- Browser-based flow ---
       console.log("\n  Logging in to Polpo Cloud...\n");
 
-      // 1. Request a code
       let code: string;
       let expiresAt: string;
       try {
@@ -68,7 +111,7 @@ export function registerLoginCommand(program: Command): void {
           headers: { "Content-Type": "application/json" },
         });
         if (!res.ok) {
-          console.error(`  Error: Server returned ${res.status}.`);
+          console.error(`  Error: Server returned ${res.status}. Is ${baseUrl} reachable?`);
           process.exit(1);
         }
         const data = (await res.json()) as { code: string; expiresAt: string };
@@ -80,11 +123,9 @@ export function registerLoginCommand(program: Command): void {
         process.exit(1);
       }
 
-      // 2. Display the code
       console.log(`  Your authorization code:\n`);
       console.log(`    ${code}\n`);
 
-      // 3. Open browser
       const authUrl = `${dashboardUrl}/cli-auth?code=${code}`;
 
       if (opts.browser !== false) {
@@ -95,7 +136,6 @@ export function registerLoginCommand(program: Command): void {
         console.log(`  Open this URL to authorize:\n  ${authUrl}\n`);
       }
 
-      // 4. Poll for approval
       process.stdout.write("  Waiting for authorization...");
 
       const expiry = new Date(expiresAt).getTime();
@@ -116,7 +156,10 @@ export function registerLoginCommand(program: Command): void {
 
           if (data.status === "approved" && data.token) {
             saveCredentials(data.token, baseUrl);
-            console.log("\n\n  Logged in successfully.\n");
+            console.log("\n\n  Logged in successfully.");
+            console.log(`  Base URL: ${baseUrl}`);
+            await autoResolveProject(data.token, baseUrl);
+            console.log();
             return;
           }
 
@@ -125,7 +168,6 @@ export function registerLoginCommand(program: Command): void {
             process.exit(1);
           }
 
-          // Still pending — show a dot
           process.stdout.write(".");
         } catch {
           // Network blip — retry

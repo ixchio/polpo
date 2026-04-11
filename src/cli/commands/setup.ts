@@ -149,7 +149,7 @@ export async function runSetupWizard(options?: SetupOptions): Promise<void> {
   // If still no providers after auth step, bail early with guidance
   if (providers.length === 0) {
     console.log(chalk.yellow("  No provider configured."));
-    console.log(chalk.dim("  Run 'polpo setup' again or 'polpo auth login' to add one."));
+    console.log(chalk.dim("  Run 'polpo setup' again to add one."));
     console.log();
     savePolpoConfig(polpoDir, generatePolpoConfigDefault(projectName));
     return;

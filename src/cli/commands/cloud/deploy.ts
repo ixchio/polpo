@@ -2,17 +2,16 @@
  * polpo deploy — sync local .polpo/ project to cloud.
  *
  * Core (always deployed):
- *   - polpo.json (config)
  *   - agents.json (agent definitions)
  *   - teams.json (team structure)
  *   - memory.md + memory/<agent>.md (knowledge base)
  *   - playbooks/ (mission templates)
- *   - missions/ (mission definitions + checkpoints + delays)
- *   - approvals (approval state)
+ *   - missions/ (mission definitions)
+ *   - skills/ (SKILL.md files)
+ *   - vault.enc (encrypted credentials)
  *
  * Opt-in (with flags):
  *   --include-tasks     Deploy tasks
- *   --include-runs      Deploy run records
  *   --include-sessions  Deploy chat sessions
  *   --all               Deploy everything (seamless local→cloud migration)
  */
@@ -26,16 +25,36 @@ import { resolveKey, decrypt } from "@polpo-ai/vault-crypto";
 import { AddAgentSchema } from "@polpo-ai/server";
 
 // ── Deploy result tracking ──────────────────────────────
+
 interface DeployResult {
   created: number;
   updated: number;
+  skipped: number;
   failed: number;
   errors: string[];
 }
 
 function emptyResult(): DeployResult {
-  return { created: 0, updated: 0, failed: 0, errors: [] };
+  return { created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
 }
+
+function mergeResult(target: DeployResult, source: DeployResult): void {
+  target.created += source.created;
+  target.updated += source.updated;
+  target.skipped += source.skipped;
+  target.failed += source.failed;
+  target.errors.push(...source.errors);
+}
+
+/** Translate raw API errors to actionable CLI messages */
+function friendlyError(msg: string): string {
+  if (msg.includes("Multiple projects found")) return "Multiple projects found. Run: polpo projects set";
+  if (/HTTP 401|Unauthorized/i.test(msg)) return "Session expired or invalid. Run: polpo login";
+  if (/HTTP 403|Forbidden/i.test(msg)) return "Access denied. Check your credentials or project permissions.";
+  return msg;
+}
+
+// ── Helpers ──────────────────────────────────────────────
 
 function resolvePolpoDir(dir: string): string {
   const polpoDir = path.resolve(dir, ".polpo");
@@ -83,10 +102,10 @@ async function deployTeams(client: ApiClient, polpoDir: string): Promise<DeployR
     if (res.status >= 200 && res.status < 300) {
       result.created++;
     } else if (res.status === 409 || (res.data as any)?.error?.includes("already exists")) {
-      // Team exists — that's fine, skip
+      result.skipped++;
     } else {
       const msg = (res.data as any)?.error ?? `HTTP ${res.status}`;
-      result.errors.push(`team "${team.name}": ${msg}`);
+      result.errors.push(`team "${team.name}": ${friendlyError(msg)}`);
       result.failed++;
     }
   }
@@ -130,27 +149,25 @@ async function deployAgents(client: ApiClient, polpoDir: string, force: boolean)
     const exists = existingNames.has(agent.name);
 
     if (exists) {
-      // Update existing agent
       if (!force && isTTY()) {
         const ok = await confirm(`  Agent "${agent.name}" already exists. Override?`);
-        if (!ok) continue;
+        if (!ok) { result.skipped++; continue; }
       }
       const res = await client.put(`/v1/agents/${encodeURIComponent(agent.name)}`, { ...agent, team: teamName });
       if (res.status >= 200 && res.status < 300) {
         result.updated++;
       } else {
         const msg = (res.data as any)?.error ?? `HTTP ${res.status}`;
-        result.errors.push(`agent "${agent.name}": update failed — ${msg}`);
+        result.errors.push(`agent "${agent.name}": update failed — ${friendlyError(msg)}`);
         result.failed++;
       }
     } else {
-      // Create new agent
       const res = await client.post("/v1/agents", { ...agent, team: teamName });
       if (res.status >= 200 && res.status < 300) {
         result.created++;
       } else {
         const msg = (res.data as any)?.error ?? `HTTP ${res.status}`;
-        result.errors.push(`agent "${agent.name}": create failed — ${msg}`);
+        result.errors.push(`agent "${agent.name}": create failed — ${friendlyError(msg)}`);
         result.failed++;
       }
     }
@@ -158,93 +175,89 @@ async function deployAgents(client: ApiClient, polpoDir: string, force: boolean)
   return result;
 }
 
-async function deployMemory(client: ApiClient, polpoDir: string): Promise<number> {
-  let count = 0;
-  // Shared memory
+async function deployMemory(client: ApiClient, polpoDir: string): Promise<DeployResult> {
+  const result = emptyResult();
   const shared = loadText(path.join(polpoDir, "memory.md"));
   if (shared) {
-    try {
-      await client.put("/v1/memory", { content: shared });
-      count++;
-    } catch { /* ignore */ }
+    const res = await client.put("/v1/memory", { content: shared });
+    if (res.status >= 200 && res.status < 300) { result.updated++; }
+    else { result.errors.push(`memory: ${friendlyError((res.data as any)?.error ?? `HTTP ${res.status}`)}`); result.failed++; }
   }
-  // Agent-specific memories
   const memDir = path.join(polpoDir, "memory");
   if (fs.existsSync(memDir)) {
     for (const file of fs.readdirSync(memDir).filter(f => f.endsWith(".md"))) {
       const agentName = file.replace(".md", "");
       const content = loadText(path.join(memDir, file));
       if (content) {
-        try {
-          await client.put(`/v1/memory/agent/${agentName}`, { content });
-          count++;
-        } catch { /* ignore */ }
+        const res = await client.put(`/v1/memory/agent/${agentName}`, { content });
+        if (res.status >= 200 && res.status < 300) { result.updated++; }
+        else { result.errors.push(`memory "${agentName}": ${friendlyError((res.data as any)?.error ?? `HTTP ${res.status}`)}`); result.failed++; }
       }
     }
   }
-  return count;
+  return result;
 }
 
-async function deployMissions(client: ApiClient, polpoDir: string): Promise<number> {
+async function deployMissions(client: ApiClient, polpoDir: string): Promise<DeployResult> {
+  const result = emptyResult();
   const files = listJsonFiles(path.join(polpoDir, "missions"));
-  let count = 0;
   for (const file of files) {
     const mission = loadJson(file);
     if (!mission) continue;
-    try {
-      await client.post("/v1/missions", {
-        name: mission.name,
-        data: typeof mission.data === "string" ? mission.data : JSON.stringify(mission.data),
-        prompt: mission.prompt,
-        status: mission.status ?? "draft",
-        schedule: mission.schedule,
-        deadline: mission.deadline,
-        notifications: mission.notifications,
-      });
-      count++;
-    } catch (err: any) {
-      console.error(`  Warning: mission "${mission.name}": ${err.message}`);
+    const res = await client.post("/v1/missions", {
+      name: mission.name,
+      data: typeof mission.data === "string" ? mission.data : JSON.stringify(mission.data),
+      prompt: mission.prompt,
+      status: mission.status ?? "draft",
+      schedule: mission.schedule,
+      deadline: mission.deadline,
+      notifications: mission.notifications,
+    });
+    if (res.status >= 200 && res.status < 300) { result.created++; }
+    else {
+      const msg = (res.data as any)?.error ?? `HTTP ${res.status}`;
+      result.errors.push(`mission "${mission.name ?? path.basename(file)}": ${friendlyError(msg)}`);
+      result.failed++;
     }
   }
-  return count;
+  return result;
 }
 
-async function deployPlaybooks(client: ApiClient, polpoDir: string): Promise<number> {
+async function deployPlaybooks(client: ApiClient, polpoDir: string): Promise<DeployResult> {
+  const result = emptyResult();
   const playbooksDir = path.join(polpoDir, "playbooks");
-  if (!fs.existsSync(playbooksDir)) return 0;
-  let count = 0;
+  if (!fs.existsSync(playbooksDir)) return result;
   for (const entry of fs.readdirSync(playbooksDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const pbFile = path.join(playbooksDir, entry.name, "playbook.json");
     const playbook = loadJson(pbFile);
     if (!playbook) continue;
-    try {
-      await client.post("/v1/playbooks", {
-        name: playbook.name ?? entry.name,
-        description: playbook.description,
-        mission: typeof playbook.mission === "string" ? playbook.mission : JSON.stringify(playbook.mission),
-        parameters: playbook.parameters,
-      });
-      count++;
-    } catch (err: any) {
-      console.error(`  Warning: playbook "${entry.name}": ${err.message}`);
+    const res = await client.post("/v1/playbooks", {
+      name: playbook.name ?? entry.name,
+      description: playbook.description,
+      mission: typeof playbook.mission === "string" ? playbook.mission : JSON.stringify(playbook.mission),
+      parameters: playbook.parameters,
+    });
+    if (res.status >= 200 && res.status < 300) { result.created++; }
+    else {
+      const msg = (res.data as any)?.error ?? `HTTP ${res.status}`;
+      result.errors.push(`playbook "${entry.name}": ${friendlyError(msg)}`);
+      result.failed++;
     }
   }
-  return count;
+  return result;
 }
 
-async function deploySkills(client: ApiClient, polpoDir: string): Promise<number> {
+async function deploySkills(client: ApiClient, polpoDir: string, force: boolean): Promise<DeployResult> {
+  const result = emptyResult();
   const skillsDir = path.join(polpoDir, "skills");
-  if (!fs.existsSync(skillsDir)) return 0;
-  let count = 0;
+  if (!fs.existsSync(skillsDir)) return result;
   for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const skillFile = path.join(skillsDir, entry.name, "SKILL.md");
     if (!fs.existsSync(skillFile)) continue;
 
     const raw = fs.readFileSync(skillFile, "utf-8");
-
-    // Parse frontmatter
     const fmMatch = raw.match(/^---\n([\s\S]*?)\n---/);
     let name = entry.name;
     let description = "";
@@ -255,102 +268,102 @@ async function deploySkills(client: ApiClient, polpoDir: string): Promise<number
       let currentArray: string[] | null = null;
       for (const line of lines) {
         const arrayItem = line.match(/^\s+-\s+(.+)/);
-        if (arrayItem && currentArray) {
-          currentArray.push(arrayItem[1].trim());
-          continue;
-        }
+        if (arrayItem && currentArray) { currentArray.push(arrayItem[1].trim()); continue; }
         currentArray = null;
         const kv = line.match(/^(\w[\w-]*)\s*:\s*(.+)?/);
         if (kv) {
-          const key = kv[1];
-          const val = kv[2]?.trim();
+          const key = kv[1]; const val = kv[2]?.trim();
           if (key === "name" && val) name = val;
           if (key === "description" && val) description = val;
-          if (key === "allowed-tools" || key === "allowedTools") {
-            allowedTools = [];
-            currentArray = allowedTools;
-          }
+          if (key === "allowed-tools" || key === "allowedTools") { allowedTools = []; currentArray = allowedTools; }
         }
       }
     }
 
-    // Extract body (everything after frontmatter)
     const bodyMatch = raw.match(/^---\n[\s\S]*?\n---\n?([\s\S]*)$/);
     const content = bodyMatch ? bodyMatch[1].trim() : raw.trim();
 
-    try {
-      await client.post("/v1/skills/create", {
-        name,
-        description,
-        content,
-        ...(allowedTools?.length ? { allowedTools } : {}),
-      });
-      count++;
-    } catch (err: any) {
-      // Skill may already exist — try to check if it's a duplicate error
-      if (err.message?.includes("already exists") || err.status === 400) {
-        // Already exists — skip silently
+    // Try create first
+    const res = await client.post("/v1/skills/create", {
+      name, description, content,
+      ...(allowedTools?.length ? { allowedTools } : {}),
+    });
+
+    if (res.status >= 200 && res.status < 300) {
+      result.created++;
+    } else if (res.status === 409 || (res.data as any)?.error?.includes("already exists")) {
+      if (force) {
+        // Update existing skill
+        const updateRes = await client.put(`/v1/skills/${encodeURIComponent(name)}`, {
+          description, content,
+          ...(allowedTools?.length ? { allowedTools } : {}),
+        });
+        if (updateRes.status >= 200 && updateRes.status < 300) { result.updated++; }
+        else { result.skipped++; }
       } else {
-        console.error(`  Warning: skill "${name}": ${err.message}`);
+        result.skipped++;
       }
+    } else {
+      const msg = (res.data as any)?.error ?? `HTTP ${res.status}`;
+      result.errors.push(`skill "${name}": ${friendlyError(msg)}`);
+      result.failed++;
     }
   }
-  return count;
+  return result;
 }
 
-async function deployVault(client: ApiClient, polpoDir: string): Promise<number> {
+async function deployVault(client: ApiClient, polpoDir: string): Promise<DeployResult> {
+  const result = emptyResult();
   const vaultPath = path.join(polpoDir, "vault.enc");
-  if (!fs.existsSync(vaultPath)) return 0;
+  if (!fs.existsSync(vaultPath)) return result;
 
   let key: Buffer;
-  try {
-    key = resolveKey();
-  } catch (err: any) {
-    console.error(`  Warning: cannot resolve vault key: ${err.message}`);
-    console.error(`  Set POLPO_VAULT_KEY env var or ensure ~/.polpo/vault.key exists.`);
-    return 0;
+  try { key = resolveKey(); }
+  catch (err: any) {
+    result.errors.push(`vault: cannot resolve key — ${err.message}. Set POLPO_VAULT_KEY or ensure ~/.polpo/vault.key exists.`);
+    result.failed++;
+    return result;
   }
 
-  const encrypted = fs.readFileSync(vaultPath);
   let vaultData: Record<string, Record<string, any>>;
   try {
-    const plaintext = decrypt(encrypted, key);
+    const plaintext = decrypt(fs.readFileSync(vaultPath), key);
     vaultData = JSON.parse(plaintext.toString("utf-8"));
   } catch (err: any) {
-    console.error(`  Warning: cannot decrypt vault: ${err.message}`);
-    return 0;
+    result.errors.push(`vault: cannot decrypt — ${err.message}`);
+    result.failed++;
+    return result;
   }
 
-  let count = 0;
   for (const [agent, services] of Object.entries(vaultData)) {
     for (const [service, entry] of Object.entries(services)) {
-      try {
-        await client.post("/v1/vault/entries", {
-          agent,
-          service,
-          type: entry.type ?? "custom",
-          label: entry.label,
-          credentials: entry.credentials,
-        });
-        count++;
-      } catch (err: any) {
-        console.error(`  Warning: vault "${agent}/${service}": ${err.message}`);
+      const res = await client.post("/v1/vault/entries", {
+        agent, service,
+        type: entry.type ?? "custom",
+        label: entry.label,
+        credentials: entry.credentials,
+      });
+      if (res.status >= 200 && res.status < 300) { result.created++; }
+      else {
+        const msg = (res.data as any)?.error ?? `HTTP ${res.status}`;
+        result.errors.push(`vault "${agent}/${service}": ${friendlyError(msg)}`);
+        result.failed++;
       }
     }
   }
-  return count;
+  return result;
 }
 
-async function deployAvatars(client: ApiClient, polpoDir: string, baseUrl: string, apiKey: string): Promise<number> {
+async function deployAvatars(client: ApiClient, polpoDir: string, baseUrl: string, apiKey: string): Promise<DeployResult> {
+  const result = emptyResult();
   const avatarsDir = path.join(polpoDir, "avatars");
-  if (!fs.existsSync(avatarsDir)) return 0;
+  if (!fs.existsSync(avatarsDir)) return result;
   const files = fs.readdirSync(avatarsDir).filter(f => {
     const ext = path.extname(f).toLowerCase();
     return [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"].includes(ext);
   });
-  if (files.length === 0) return 0;
+  if (files.length === 0) return result;
 
-  // Ensure .polpo/avatars/ exists in the sandbox
   try {
     await fetch(`${baseUrl}/v1/files/mkdir`, {
       method: "POST",
@@ -359,91 +372,63 @@ async function deployAvatars(client: ApiClient, polpoDir: string, baseUrl: strin
     });
   } catch { /* may already exist */ }
 
-  let count = 0;
   for (const file of files) {
-    const filePath = path.join(avatarsDir, file);
-    const fileData = fs.readFileSync(filePath);
-
-    // Upload via multipart form to /v1/files/upload
     const formData = new FormData();
     formData.append("path", ".polpo/avatars");
-    formData.append("file", new Blob([fileData]), file);
-
+    formData.append("file", new Blob([fs.readFileSync(path.join(avatarsDir, file))]), file);
     try {
       const res = await fetch(`${baseUrl}/v1/files/upload`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${apiKey}` },
         body: formData,
       });
-      if (res.ok) {
-        count++;
-      } else {
-        console.error(`  Warning: avatar "${file}": HTTP ${res.status}`);
-      }
+      if (res.ok) { result.created++; }
+      else { result.errors.push(`avatar "${file}": HTTP ${res.status}`); result.failed++; }
     } catch (err: any) {
-      console.error(`  Warning: avatar "${file}": ${err.message}`);
+      result.errors.push(`avatar "${file}": ${err.message}`);
+      result.failed++;
     }
   }
-  return count;
-}
-
-async function deployApprovals(client: ApiClient, polpoDir: string): Promise<number> {
-  const approvals = loadJson(path.join(polpoDir, "approvals.json"));
-  if (!approvals || !Array.isArray(approvals)) return 0;
-  // Approvals are read-only in the API for now — skip
-  return 0;
+  return result;
 }
 
 // ── Opt-in deployers ──────────────────────────────────────
 
-async function deployTasks(client: ApiClient, polpoDir: string): Promise<number> {
+async function deployTasks(client: ApiClient, polpoDir: string): Promise<DeployResult> {
+  const result = emptyResult();
   const files = listJsonFiles(path.join(polpoDir, "tasks"));
-  let count = 0;
   for (const file of files) {
     const task = loadJson(file);
     if (!task) continue;
-    try {
-      await client.post("/v1/tasks", {
-        title: task.title,
-        description: task.description,
-        assignTo: task.assignTo,
-        group: task.group,
-        missionId: task.missionId,
-        dependsOn: task.dependsOn,
-        expectations: task.expectations,
-        metrics: task.metrics,
-        maxRetries: task.maxRetries,
-        maxDuration: task.maxDuration,
-        deadline: task.deadline,
-        priority: task.priority,
-      });
-      count++;
-    } catch (err: any) {
-      console.error(`  Warning: task "${task.title}": ${err.message}`);
+    const res = await client.post("/v1/tasks", {
+      title: task.title, description: task.description,
+      assignTo: task.assignTo, group: task.group,
+      missionId: task.missionId, dependsOn: task.dependsOn,
+      expectations: task.expectations, metrics: task.metrics,
+      maxRetries: task.maxRetries, maxDuration: task.maxDuration,
+      deadline: task.deadline, priority: task.priority,
+    });
+    if (res.status >= 200 && res.status < 300) { result.created++; }
+    else {
+      const msg = (res.data as any)?.error ?? `HTTP ${res.status}`;
+      result.errors.push(`task "${task.title ?? path.basename(file)}": ${friendlyError(msg)}`);
+      result.failed++;
     }
   }
-  return count;
+  return result;
 }
 
-async function deployRuns(client: ApiClient, polpoDir: string): Promise<number> {
-  // Runs are runtime state — deploy for migration only
-  const files = listJsonFiles(path.join(polpoDir, "runs"));
-  // Skip: runs are managed by the orchestrator, not created via API
-  return files.length > 0 ? files.length : 0;
-}
-
-async function deploySessions(client: ApiClient, polpoDir: string): Promise<number> {
+async function deploySessions(client: ApiClient, polpoDir: string): Promise<DeployResult> {
+  const result = emptyResult();
   const sessionsDir = path.join(polpoDir, "sessions");
-  if (!fs.existsSync(sessionsDir)) return 0;
+  if (!fs.existsSync(sessionsDir)) return result;
   const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith(".jsonl"));
-  let count = 0;
 
   for (const file of files) {
     const raw = fs.readFileSync(path.join(sessionsDir, file), "utf-8");
     const lines = raw.split("\n").filter(l => l.trim());
     if (lines.length === 0) continue;
 
-    // First line is session metadata
     let title: string | undefined;
     let agent: string | undefined;
     const messages: Array<{ role: "user" | "assistant"; content: string; toolCalls?: unknown[] }> = [];
@@ -451,30 +436,24 @@ async function deploySessions(client: ApiClient, polpoDir: string): Promise<numb
     for (const line of lines) {
       try {
         const obj = JSON.parse(line);
-        if (obj._session) {
-          title = obj.title;
-          agent = obj.agent;
-        } else if (obj.role && obj.content) {
-          messages.push({
-            role: obj.role,
-            content: obj.content,
-            ...(obj.toolCalls ? { toolCalls: obj.toolCalls } : {}),
-          });
+        if (obj._session) { title = obj.title; agent = obj.agent; }
+        else if (obj.role && obj.content) {
+          messages.push({ role: obj.role, content: obj.content, ...(obj.toolCalls ? { toolCalls: obj.toolCalls } : {}) });
         }
       } catch { /* skip malformed lines */ }
     }
 
     if (messages.length === 0) continue;
 
-    try {
-      await client.post("/v1/chat/sessions/import", { title, agent, messages });
-      count++;
-    } catch (err: any) {
-      console.error(`  Warning: session "${title ?? file}": ${err.message}`);
+    const res = await client.post("/v1/chat/sessions/import", { title, agent, messages });
+    if (res.status >= 200 && res.status < 300) { result.created++; }
+    else {
+      const msg = (res.data as any)?.error ?? `HTTP ${res.status}`;
+      result.errors.push(`session "${title ?? file}": ${friendlyError(msg)}`);
+      result.failed++;
     }
   }
-
-  return count;
+  return result;
 }
 
 // ── Main command ──────────────────────────────────────
@@ -484,11 +463,10 @@ export function registerDeployCommand(program: Command): void {
     .command("deploy")
     .description("Deploy local .polpo/ project to cloud")
     .option("-d, --dir <path>", "Project directory", ".")
-    .option("-y, --yes", "Skip confirmation prompt")
+    .option("-y, --yes", "Skip all confirmation prompts")
     .option("-f, --force", "Force override existing resources without asking")
     .option("--include-tasks", "Also deploy tasks")
-    .option("--include-runs", "Also deploy run records (migration)")
-    .option("--include-sessions", "Also deploy chat sessions (migration)")
+    .option("--include-sessions", "Also deploy chat sessions")
     .option("--all", "Deploy everything (full local→cloud migration)")
     .action(async (opts) => {
       const creds = loadCredentials();
@@ -501,6 +479,7 @@ export function registerDeployCommand(program: Command): void {
       const client = createApiClient(creds);
       const polpoConfig = loadJson(path.join(polpoDir, "polpo.json"));
       const projectName = polpoConfig?.project ?? path.basename(path.resolve(opts.dir));
+      const force = opts.force || opts.yes || false;
 
       console.log("\n  Polpo Deploy\n");
 
@@ -525,9 +504,9 @@ export function registerDeployCommand(program: Command): void {
             if (existing) {
               projectId = existing.id;
               console.log(`  Project: ${existing.name}\n`);
-            } else if (isTTY() || opts.yes) {
+            } else if (isTTY() || force) {
               const slug = projectName.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
-              const ok = opts.yes ? true : await confirm(`  Project "${projectName}" not found. Create it?`);
+              const ok = force ? true : await confirm(`  Project "${projectName}" not found. Create it?`);
               if (ok) {
                 const createRes = await client.post<any>("/v1/projects", { name: projectName, slug, orgId });
                 projectId = createRes.data?.id;
@@ -537,17 +516,20 @@ export function registerDeployCommand(program: Command): void {
                 process.exit(0);
               }
             } else {
-              console.error(`  Project "${projectName}" not found.`);
+              console.error(`  Project "${projectName}" not found. Run: polpo projects create ${projectName}`);
               process.exit(1);
             }
           }
         } catch {
-          // Control plane auth may not support /v1/orgs — continue without project linking
+          // Control plane auth failed
+          console.error("  Could not resolve project. Run: polpo login");
+          process.exit(1);
         }
       }
 
       if (!projectId) {
-        console.log(`  Project: ${projectName}\n`);
+        console.error("  No project resolved. Run: polpo projects set");
+        process.exit(1);
       }
 
       // Save projectId for future deploys
@@ -572,14 +554,12 @@ export function registerDeployCommand(program: Command): void {
 
       const detected: { envVar: string; provider: string; value: string }[] = [];
 
-      // Check process.env
       for (const [envVar, provider] of Object.entries(LLM_KEYS)) {
         if (process.env[envVar]) {
           detected.push({ envVar, provider, value: process.env[envVar]! });
         }
       }
 
-      // Check .polpo/.env
       const envFile = path.join(polpoDir, ".env");
       if (fs.existsSync(envFile)) {
         for (const line of fs.readFileSync(envFile, "utf-8").split("\n")) {
@@ -602,7 +582,7 @@ export function registerDeployCommand(program: Command): void {
         }
         console.log();
 
-        if (isTTY() && !opts.yes) {
+        if (isTTY() && !force) {
           const push = await confirm("  Push LLM keys to cloud?");
           if (push) {
             let n = 0;
@@ -616,7 +596,7 @@ export function registerDeployCommand(program: Command): void {
         }
       }
 
-      // ── Step 3: Scan resources ────────────────────────
+      // ── Step 3: Scan & show resources ────────────────────
       const hasTeams = fs.existsSync(path.join(polpoDir, "teams.json"));
       const hasAgents = fs.existsSync(path.join(polpoDir, "agents.json"));
       const hasMemory = fs.existsSync(path.join(polpoDir, "memory.md")) ||
@@ -633,16 +613,12 @@ export function registerDeployCommand(program: Command): void {
         fs.readdirSync(path.join(polpoDir, "avatars")).length > 0;
       const hasTasks = fs.existsSync(path.join(polpoDir, "tasks")) &&
         fs.readdirSync(path.join(polpoDir, "tasks")).length > 0;
-      const hasRuns = fs.existsSync(path.join(polpoDir, "runs")) &&
-        fs.readdirSync(path.join(polpoDir, "runs")).length > 0;
       const hasSessions = fs.existsSync(path.join(polpoDir, "sessions")) &&
         fs.readdirSync(path.join(polpoDir, "sessions")).length > 0;
 
       const includeTasks = opts.all || opts.includeTasks;
-      const includeRuns = opts.all || opts.includeRuns;
       const includeSessions = opts.all || opts.includeSessions;
 
-      // Show detailed resource summary
       console.log("  Resources to deploy:");
       if (hasAgents) {
         const agentsData = loadJson(path.join(polpoDir, "agents.json"));
@@ -675,7 +651,7 @@ export function registerDeployCommand(program: Command): void {
       if (includeSessions && hasSessions) console.log("    Sessions ........ yes");
       console.log("");
 
-      if (!opts.yes && isTTY()) {
+      if (!force && isTTY()) {
         const ok = await confirm("  Deploy?");
         if (!ok) {
           console.log("  Aborted.");
@@ -685,89 +661,34 @@ export function registerDeployCommand(program: Command): void {
       }
 
       // ── Step 4: Deploy ────────────────────────
-      const force = opts.force || false;
       console.log("  Deploying...");
-      const summary: string[] = [];
-      const allErrors: string[] = [];
+      const total = emptyResult();
 
-      if (hasTeams) {
-        const r = await deployTeams(client, polpoDir);
-        if (r.created > 0) summary.push(`${r.created} team(s) created`);
-        if (r.failed > 0) allErrors.push(...r.errors);
-      }
+      if (hasTeams) { mergeResult(total, await deployTeams(client, polpoDir)); }
+      if (hasAgents) { mergeResult(total, await deployAgents(client, polpoDir, force)); }
+      if (hasMemory) { mergeResult(total, await deployMemory(client, polpoDir)); }
+      if (hasMissions) { mergeResult(total, await deployMissions(client, polpoDir)); }
+      if (hasPlaybooks) { mergeResult(total, await deployPlaybooks(client, polpoDir)); }
+      if (hasSkills) { mergeResult(total, await deploySkills(client, polpoDir, force)); }
+      if (hasVault) { mergeResult(total, await deployVault(client, polpoDir)); }
+      if (hasAvatars) { mergeResult(total, await deployAvatars(client, polpoDir, creds.baseUrl, creds.apiKey)); }
+      if (includeTasks && hasTasks) { mergeResult(total, await deployTasks(client, polpoDir)); }
+      if (includeSessions && hasSessions) { mergeResult(total, await deploySessions(client, polpoDir)); }
 
-      if (hasAgents) {
-        const r = await deployAgents(client, polpoDir, force);
-        if (r.created > 0) summary.push(`${r.created} agent(s) created`);
-        if (r.updated > 0) summary.push(`${r.updated} agent(s) updated`);
-        if (r.failed > 0) allErrors.push(...r.errors);
-      }
+      // ── Summary ────────────────────────
+      const parts: string[] = [];
+      if (total.created > 0) parts.push(`${total.created} created`);
+      if (total.updated > 0) parts.push(`${total.updated} updated`);
+      if (total.skipped > 0) parts.push(`${total.skipped} skipped`);
+      if (total.failed > 0) parts.push(`${total.failed} failed`);
 
-      if (hasMemory) {
-        const n = await deployMemory(client, polpoDir);
-        if (n > 0) summary.push(`${n} memory file(s)`);
-      }
-
-      if (hasMissions) {
-        const n = await deployMissions(client, polpoDir);
-        if (n > 0) summary.push(`${n} mission(s)`);
-      }
-
-      if (hasPlaybooks) {
-        const n = await deployPlaybooks(client, polpoDir);
-        if (n > 0) summary.push(`${n} playbook(s)`);
-      }
-
-      if (hasSkills) {
-        const n = await deploySkills(client, polpoDir);
-        if (n > 0) summary.push(`${n} skill(s)`);
-      }
-
-      if (hasVault) {
-        const n = await deployVault(client, polpoDir);
-        if (n > 0) summary.push(`${n} vault entry(ies)`);
-      }
-
-      if (hasAvatars) {
-        const n = await deployAvatars(client, polpoDir, creds.baseUrl, creds.apiKey);
-        if (n > 0) summary.push(`${n} avatar(s)`);
-      }
-
-      if (hasSessions) {
-        const n = await deploySessions(client, polpoDir);
-        if (n > 0) summary.push(`${n} session(s)`);
-      }
-
-      // Deploy opt-in
-      if (includeTasks && hasTasks) {
-        const n = await deployTasks(client, polpoDir);
-        if (n > 0) summary.push(`${n} task(s)`);
-      }
-
-      if (includeRuns && hasRuns) {
-        const n = await deployRuns(client, polpoDir);
-        if (n > 0) summary.push(`${n} run(s) (skipped — needs import API)`);
-      }
-
-
-      if (allErrors.length > 0) {
-        // Rewrite cryptic server errors to actionable CLI messages
-        const friendlyErrors = allErrors.map(err =>
-          err.includes("Multiple projects found")
-            ? err.replace(/Multiple projects found.*/, "Multiple projects found. Run: polpo projects set")
-            : err
-        );
+      if (total.errors.length > 0) {
         console.log("\n  Errors:");
-        for (const err of friendlyErrors) console.log(`    - ${err}`);
+        for (const err of total.errors) console.log(`    - ${err}`);
       }
 
-      console.log(`\n  Deployed: ${summary.join(", ") || "nothing to deploy"}\n`);
+      console.log(`\n  Result: ${parts.join(", ") || "nothing to deploy"}\n`);
 
-      if (allErrors.length > 0) {
-        process.exit(1);
-      }
-
-      // Exit explicitly — open HTTP connections from fetch keep the event loop alive
-      process.exit(0);
+      process.exit(total.failed > 0 ? 1 : 0);
     });
 }

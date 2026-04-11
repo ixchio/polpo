@@ -296,7 +296,8 @@ program
     }
 
     console.log(chalk.green("\n  Polpo initialized!"));
-    console.log(chalk.dim("  Run: polpo start\n"));
+    console.log(chalk.dim("\n  Local development:  polpo start"));
+    console.log(chalk.dim("  Cloud deployment:   polpo login && polpo deploy\n"));
   });
 
 // polpo run
