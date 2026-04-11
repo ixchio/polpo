@@ -1,5 +1,5 @@
 /**
- * polpo-cloud deploy — sync local .polpo/ project to cloud.
+ * polpo deploy — sync local .polpo/ project to cloud.
  *
  * Core (always deployed):
  *   - polpo.json (config)

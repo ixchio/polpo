@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
-import type { PolpoFileConfig, PolpoFileConfigRaw, PolpoSettings, PolpoConfig, ProviderConfig, ModelConfig, Team } from "./types.js";
+import type { PolpoFileConfig, PolpoFileConfigRaw, PolpoSettings, PolpoConfig, ProviderConfig, ModelConfig } from "./types.js";
 import { getPolpoDir } from "./constants.js";
 
 const DEFAULT_SETTINGS: PolpoSettings = {
@@ -16,28 +16,13 @@ export function loadPolpoConfig(polpoDir: string): PolpoFileConfig | undefined {
   if (!existsSync(filePath)) return undefined;
   try {
     const raw = JSON.parse(readFileSync(filePath, "utf-8")) as PolpoFileConfigRaw;
-    return migrateConfig(raw);
+    return {
+      project: raw.project ?? "",
+      teams: [],
+      settings: raw.settings as PolpoSettings ?? { maxRetries: 3, workDir: ".", logLevel: "normal" },
+      providers: raw.providers,
+    };
   } catch { return undefined; }
-}
-
-/** Migrate old singular `team` config to new `teams` array. */
-function migrateConfig(raw: PolpoFileConfigRaw): PolpoFileConfig {
-  let teams: Team[];
-  if (raw.teams && raw.teams.length > 0) {
-    teams = raw.teams;
-  } else if (raw.team) {
-    // Legacy: singular team → wrap in array
-    teams = [raw.team];
-  } else {
-    teams = [{ name: "default", agents: [] }];
-  }
-
-  return {
-    project: raw.project ?? "",
-    teams,
-    settings: raw.settings as PolpoSettings ?? { maxRetries: 3, workDir: ".", logLevel: "normal" },
-    providers: raw.providers,
-  };
 }
 
 export function savePolpoConfig(polpoDir: string, config: PolpoFileConfig): void {
@@ -256,26 +241,15 @@ export async function parseConfig(workDir: string): Promise<PolpoConfig> {
 
 export function generatePolpoConfigDefault(
   projectName: string,
-  options?: { model?: string; teamName?: string; agentName?: string; agentRole?: string; providers?: Record<string, ProviderConfig> },
+  options?: { model?: string; providers?: Record<string, ProviderConfig> },
 ): PolpoFileConfig {
-  const agent: Record<string, unknown> = {
-    name: options?.agentName ?? "agent-1",
-    role: options?.agentRole ?? "founder",
-  };
-  if (options?.model) {
-    agent.model = options.model;
-  }
   const settings: Record<string, unknown> = { ...DEFAULT_SETTINGS };
   if (options?.model) {
     settings.orchestratorModel = options.model;
   }
   const config: PolpoFileConfig = {
     project: projectName,
-    teams: [{
-      name: options?.teamName ?? "default",
-      description: `${options?.teamName ?? "Default"} Polpo team`,
-      agents: [agent as any],
-    }],
+    teams: [],
     settings: settings as any,
   };
   if (options?.providers && Object.keys(options.providers).length > 0) {

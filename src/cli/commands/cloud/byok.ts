@@ -1,5 +1,5 @@
 /**
- * polpo-cloud byok — manage BYOK (Bring Your Own Key) API keys.
+ * polpo byok — manage BYOK (Bring Your Own Key) API keys.
  */
 import type { Command } from "commander";
 import { loadCredentials } from "./config.js";
@@ -21,7 +21,7 @@ export function registerByokCommand(program: Command): void {
       const creds = loadCredentials();
       if (!creds) {
         console.error(
-          "Not logged in. Run: polpo-cloud login --api-key <key>",
+          "Not logged in. Run: polpo login --api-key <key>",
         );
         process.exit(1);
       }
@@ -73,7 +73,7 @@ export function registerByokCommand(program: Command): void {
       const creds = loadCredentials();
       if (!creds) {
         console.error(
-          "Not logged in. Run: polpo-cloud login --api-key <key>",
+          "Not logged in. Run: polpo login --api-key <key>",
         );
         process.exit(1);
       }
@@ -116,7 +116,7 @@ export function registerByokCommand(program: Command): void {
       const creds = loadCredentials();
       if (!creds) {
         console.error(
-          "Not logged in. Run: polpo-cloud login --api-key <key>",
+          "Not logged in. Run: polpo login --api-key <key>",
         );
         process.exit(1);
       }

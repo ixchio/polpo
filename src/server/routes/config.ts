@@ -444,13 +444,30 @@ export function publicConfigRoutes(
 
       const config = generatePolpoConfigDefault(org, {
         model: body.model || undefined,
-        agentName: body.agentName || undefined,
-        agentRole: body.agentRole || undefined,
         providers: body.providers,
       });
 
       try {
         savePolpoConfig(targetPolpoDir, config);
+
+        // Populate agent and team stores
+        const { FileTeamStore } = await import("../../stores/file-team-store.js");
+        const { FileAgentStore } = await import("../../stores/file-agent-store.js");
+        const teamStore = new FileTeamStore(targetPolpoDir);
+        const agentStore = new FileAgentStore(targetPolpoDir);
+
+        const existingTeams = await teamStore.getTeams();
+        if (existingTeams.length === 0) {
+          await teamStore.createTeam({ name: "default", description: "Default Polpo team", agents: [] });
+        }
+        const agentName = body.agentName || "agent-1";
+        const agentRole = body.agentRole || "founder";
+        const existingAgent = await agentStore.getAgent(agentName);
+        if (!existingAgent) {
+          const agentConfig: Record<string, unknown> = { name: agentName, role: agentRole };
+          if (body.model) agentConfig.model = body.model;
+          await agentStore.createAgent(agentConfig as any, "default");
+        }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Unknown error";
         return c.json({ ok: false, error: `Failed to save config: ${msg}` }, 500);

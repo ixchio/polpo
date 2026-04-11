@@ -1,5 +1,5 @@
 /**
- * polpo-cloud status — show project status summary.
+ * polpo cloud-status — show project status summary.
  */
 import type { Command } from "commander";
 import { loadCredentials } from "./config.js";
@@ -13,7 +13,7 @@ export function registerStatusCommand(program: Command): void {
       const creds = loadCredentials();
       if (!creds) {
         console.error(
-          "Not logged in. Run: polpo-cloud login --api-key <key>",
+          "Not logged in. Run: polpo login --api-key <key>",
         );
         process.exit(1);
       }

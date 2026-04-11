@@ -1,5 +1,5 @@
 /**
- * polpo-cloud logout — clear stored credentials.
+ * polpo logout — clear stored credentials.
  */
 import type { Command } from "commander";
 import { clearCredentials } from "./config.js";

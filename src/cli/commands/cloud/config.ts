@@ -1,5 +1,5 @@
 /**
- * Credential storage for the polpo-cloud CLI.
+ * Credential storage for the Polpo CLI.
  *
  * Reads/writes credentials to ~/.polpo/credentials.json.
  */

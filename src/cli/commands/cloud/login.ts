@@ -8,8 +8,8 @@ import type { Command } from "commander";
 import { saveCredentials } from "./config.js";
 import { isTTY, promptMasked } from "./prompt.js";
 
-const DEFAULT_API_URL = "https://polpo-cloud-production.up.railway.app";
-const DEFAULT_DASHBOARD_URL = "https://cloud.polpo.sh";
+const DEFAULT_API_URL = "https://api.polpo.sh";
+const DEFAULT_DASHBOARD_URL = "https://polpo.sh";
 
 async function openBrowser(url: string): Promise<void> {
   const { platform } = await import("node:os");

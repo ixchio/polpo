@@ -1,5 +1,5 @@
 /**
- * HTTP client for the polpo-cloud API.
+ * HTTP client for the Polpo Cloud API.
  *
  * Wraps fetch with Authorization header and JSON handling.
  */

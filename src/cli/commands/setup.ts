@@ -4,7 +4,7 @@ import readline from "node:readline";
 import chalk from "chalk";
 import type { Command } from "commander";
 import { loadPolpoConfig, savePolpoConfig, generatePolpoConfigDefault } from "../../core/config.js";
-import { createCliAgentStore } from "../stores.js";
+import { createCliTeamAndAgentStores } from "../stores.js";
 import { PROVIDER_ENV_MAP } from "../../llm/pi-client.js";
 import {
   detectProviders,
@@ -107,6 +107,20 @@ export async function runSetupWizard(options?: SetupOptions): Promise<void> {
       model: model ?? undefined,
     });
     savePolpoConfig(polpoDir, config);
+
+    // Populate stores with a default agent
+    const { teamStore: ts, agentStore: as_ } = await createCliTeamAndAgentStores(polpoDir);
+    const teams = await ts.getTeams();
+    if (teams.length === 0) {
+      await ts.createTeam({ name: "default", description: "Default Polpo team", agents: [] });
+    }
+    const agents = await as_.getAgents();
+    if (agents.length === 0) {
+      const agent: Record<string, unknown> = { name: "agent-1", role: "founder" };
+      if (model) agent.model = model;
+      await as_.createAgent(agent as any, "default");
+    }
+
     if (!model) {
       console.log(chalk.yellow("  No model configured. Set POLPO_MODEL or run 'polpo setup' interactively."));
     } else {
@@ -182,22 +196,33 @@ export async function runSetupWizard(options?: SetupOptions): Promise<void> {
   console.log(chalk.bold("  Step 3 — First agent"));
   console.log();
 
-  // Read agent defaults from AgentStore (preferred) with polpo.json fallback
-  const agentStore = await createCliAgentStore(polpoDir);
+  // Read agent defaults from stores
+  const { teamStore, agentStore } = await createCliTeamAndAgentStores(polpoDir);
   const existingAgents = await agentStore.getAgents();
-  const defaultAgentName = existingAgents[0]?.name ?? existing?.teams?.[0]?.agents?.[0]?.name ?? "agent-1";
-  const defaultAgentRole = existingAgents[0]?.role ?? existing?.teams?.[0]?.agents?.[0]?.role ?? "founder";
+  const defaultAgentName = existingAgents[0]?.name ?? "agent-1";
+  const defaultAgentRole = existingAgents[0]?.role ?? "founder";
 
   const agentName = await promptWithDefault("Agent name", defaultAgentName);
   const agentRole = await promptWithDefault("Agent role", defaultAgentRole);
 
-  // ── Write config ──────────────────────────────────
+  // ── Write config (project/settings/providers only) ──
   const config = generatePolpoConfigDefault(projectName, {
     model: selectedModel,
-    agentName,
-    agentRole,
   });
   savePolpoConfig(polpoDir, config);
+
+  // ── Populate agent and team stores ──
+  const existingTeams = await teamStore.getTeams();
+  if (existingTeams.length === 0) {
+    await teamStore.createTeam({ name: "default", description: "Default Polpo team", agents: [] });
+  }
+
+  const existingAgent = await agentStore.getAgent(agentName);
+  if (!existingAgent) {
+    const agentConfig: Record<string, unknown> = { name: agentName, role: agentRole };
+    if (selectedModel) agentConfig.model = selectedModel;
+    await agentStore.createAgent(agentConfig as any, "default");
+  }
 
   // ── Summary ──
   console.log();
@@ -207,7 +232,7 @@ export async function runSetupWizard(options?: SetupOptions): Promise<void> {
   console.log(`  ${chalk.dim("Model:")}  ${selectedModel ?? chalk.yellow("not set")}`);
   console.log(`  ${chalk.dim("Agent:")}  ${agentName} (${agentRole})`);
   console.log();
-  console.log(chalk.dim("  Config saved to .polpo/polpo.json"));
+  console.log(chalk.dim("  Config saved to .polpo/"));
   console.log(chalk.dim("  Run: polpo start"));
   console.log();
 }
