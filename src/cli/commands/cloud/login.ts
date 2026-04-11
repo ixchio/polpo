@@ -36,10 +36,9 @@ async function autoResolveProject(apiKey: string, baseUrl: string): Promise<void
     const projects = Array.isArray(projRes.data) ? projRes.data : [];
 
     if (projects.length === 1) {
-      saveCredentials(apiKey, baseUrl, projects[0].id);
-      console.log(`  Project: ${projects[0].name} (auto-selected)`);
+      console.log(`  Project: ${projects[0].name}`);
     } else if (projects.length > 1) {
-      console.log(`  ${projects.length} projects found. Run: polpo projects set`);
+      console.log(`  ${projects.length} projects found. Deploy will auto-link.`);
     }
   } catch { /* best effort */ }
 }

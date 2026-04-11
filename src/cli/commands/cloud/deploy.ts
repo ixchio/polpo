@@ -18,7 +18,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Command } from "commander";
-import { loadCredentials, saveCredentials } from "./config.js";
+import { loadCredentials } from "./config.js";
 import { createApiClient, type ApiClient } from "./api.js";
 import { isTTY, confirm } from "./prompt.js";
 import { resolveKey, decrypt } from "@polpo-ai/vault-crypto";
@@ -484,7 +484,8 @@ export function registerDeployCommand(program: Command): void {
       console.log("\n  Polpo Deploy\n");
 
       // ── Step 1: Resolve project ────────────────────────
-      let projectId: string | undefined = creds.projectId;
+      // Read projectId from local polpo.json
+      let projectId: string | undefined = polpoConfig?.projectId;
       let orgId: string | undefined;
 
       if (!projectId) {
@@ -532,9 +533,10 @@ export function registerDeployCommand(program: Command): void {
         process.exit(1);
       }
 
-      // Save projectId for future deploys
-      if (projectId && !creds.projectId) {
-        saveCredentials(creds.apiKey, creds.baseUrl, projectId);
+      // Save projectId in local polpo.json for future deploys
+      if (projectId && polpoConfig && !polpoConfig.projectId) {
+        polpoConfig.projectId = projectId;
+        fs.writeFileSync(path.join(polpoDir, "polpo.json"), JSON.stringify(polpoConfig, null, 2), "utf-8");
       }
 
       // ── Step 2: Detect LLM keys ────────────────────────

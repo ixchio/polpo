@@ -15,13 +15,11 @@ const DEFAULT_BASE_URL = "https://api.polpo.sh";
 export interface Credentials {
   apiKey: string;
   baseUrl: string;
-  projectId?: string;
 }
 
 export function saveCredentials(
   apiKey: string,
   baseUrl?: string,
-  projectId?: string,
 ): void {
   if (!fs.existsSync(CONFIG_DIR)) {
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
@@ -30,7 +28,6 @@ export function saveCredentials(
   const creds: Credentials = {
     apiKey,
     baseUrl: baseUrl ?? DEFAULT_BASE_URL,
-    ...(projectId ? { projectId } : {}),
   };
 
   fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(creds, null, 2), "utf-8");
