@@ -46,17 +46,10 @@ import chalk from "chalk";
 import { Orchestrator } from "../core/orchestrator.js";
 import type { PolpoState, Task, TaskStatus } from "../core/types.js";
 
-import { registerTaskCommands } from "./commands/task.js";
-import { registerMissionCommands } from "./commands/mission.js";
-import { registerTeamCommands } from "./commands/team.js";
-import { registerMemoryCommands } from "./commands/memory.js";
-import { registerLogsCommands } from "./commands/logs.js";
-import { registerConfigCommands } from "./commands/config.js";
-import { registerPlaybookCommands } from "./commands/playbook.js";
-import { registerSkillsCommands } from "./commands/skills.js";
 import { registerModelsCommands } from "./commands/models.js";
-import { registerScheduleCommands } from "./commands/schedule.js";
-import { registerAgentOnboardCommands } from "./commands/agent-onboard.js";
+// Removed: task, mission, team, memory, config, playbook, skills, schedule,
+// agent-onboard, logs, browser-profile — all file-based commands.
+// Resources are defined in files and synced via polpo deploy.
 import { registerUpdateCommand } from "./commands/update.js";
 // Cloud commands (unified CLI)
 import { registerLoginCommand } from "./commands/cloud/login.js";
@@ -550,18 +543,7 @@ program
   .action(serveAction);
 
 // Register subcommand groups
-registerTaskCommands(program);
-registerMissionCommands(program);
-registerTeamCommands(program);
-registerMemoryCommands(program);
-registerLogsCommands(program);
-registerConfigCommands(program);
-registerPlaybookCommands(program);
-registerSkillsCommands(program);
 registerModelsCommands(program);
-// init, setup, browser-profile, chat removed
-registerScheduleCommands(program);
-registerAgentOnboardCommands(program);
 registerUpdateCommand(program);
 
 // Cloud commands

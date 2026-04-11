@@ -394,6 +394,23 @@ async function deployAvatars(client: ApiClient, polpoDir: string, baseUrl: strin
 
 // ── Opt-in deployers ──────────────────────────────────────
 
+async function deploySchedules(client: ApiClient, polpoDir: string): Promise<DeployResult> {
+  const result = emptyResult();
+  const files = listJsonFiles(path.join(polpoDir, "schedules"));
+  for (const file of files) {
+    const schedule = loadJson(file);
+    if (!schedule) continue;
+    const res = await client.post("/v1/schedules", schedule);
+    if (res.status >= 200 && res.status < 300) { result.created++; }
+    else {
+      const msg = (res.data as any)?.error ?? `HTTP ${res.status}`;
+      result.errors.push(`schedule "${schedule.name ?? path.basename(file)}": ${friendlyError(msg)}`);
+      result.failed++;
+    }
+  }
+  return result;
+}
+
 async function deployTasks(client: ApiClient, polpoDir: string): Promise<DeployResult> {
   const result = emptyResult();
   const files = listJsonFiles(path.join(polpoDir, "tasks"));
@@ -629,6 +646,8 @@ export function registerDeployCommand(program: Command): void {
         fs.readdirSync(path.join(polpoDir, "skills")).some(
           (d) => fs.statSync(path.join(polpoDir, "skills", d)).isDirectory()
         );
+      const hasSchedules = fs.existsSync(path.join(polpoDir, "schedules")) &&
+        fs.readdirSync(path.join(polpoDir, "schedules")).length > 0;
       const hasVault = fs.existsSync(path.join(polpoDir, "vault.enc"));
       const hasAvatars = fs.existsSync(path.join(polpoDir, "avatars")) &&
         fs.readdirSync(path.join(polpoDir, "avatars")).length > 0;
@@ -666,6 +685,10 @@ export function registerDeployCommand(program: Command): void {
         ).length;
         console.log(`    Skills .......... ${n}`);
       }
+      if (hasSchedules) {
+        const n = fs.readdirSync(path.join(polpoDir, "schedules")).filter(f => f.endsWith(".json")).length;
+        console.log(`    Schedules ....... ${n}`);
+      }
       if (hasVault) console.log("    Vault ........... yes");
       if (hasAvatars) console.log("    Avatars ......... yes");
       if (includeTasks && hasTasks) console.log("    Tasks ........... yes");
@@ -691,6 +714,7 @@ export function registerDeployCommand(program: Command): void {
       if (hasMissions) { mergeResult(total, await deployMissions(client, polpoDir)); }
       if (hasPlaybooks) { mergeResult(total, await deployPlaybooks(client, polpoDir)); }
       if (hasSkills) { mergeResult(total, await deploySkills(client, polpoDir, force)); }
+      if (hasSchedules) { mergeResult(total, await deploySchedules(client, polpoDir)); }
       if (hasVault) { mergeResult(total, await deployVault(client, polpoDir)); }
       if (hasAvatars) { mergeResult(total, await deployAvatars(client, polpoDir, creds.baseUrl, creds.apiKey)); }
       if (includeTasks && hasTasks) { mergeResult(total, await deployTasks(client, polpoDir)); }
