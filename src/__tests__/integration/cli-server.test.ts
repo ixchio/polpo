@@ -101,8 +101,8 @@ describe("CLI standalone (no server)", () => {
     expect(r.exitCode).toBe(0);
     const out = r.stdout + r.stderr;
     expect(out).toContain("polpo-ai");
-    expect(out).toContain("task");
-    expect(out).toContain("memory");
+    expect(out).toContain("deploy");
+    expect(out).toContain("login");
   });
 
   it.skip("polpo models list --json — requires Gateway access", async () => {
@@ -175,185 +175,12 @@ describe("CLI with project directory", () => {
     }
   });
 
-  // ── Task lifecycle: add → list → show → delete ────────────────────
-
-  let createdTaskId: string;
-
-  it("polpo task add --no-prep — creates a task", async () => {
-    const r = await run([
-      "task", "add", "--no-prep", "-d", tmpDir, "-a", "agent-1",
-      "CLI integration test task",
-    ]);
-    expect(r.exitCode).toBe(0);
-    const out = r.stdout + r.stderr;
-    expect(out).toContain("Task created");
-    expect(out).toContain("CLI integration test task");
-
-    // Extract task ID from output (format: "ID:    <id>" with possible ANSI/spacing)
-    const idMatch = out.match(/ID:\s*([a-zA-Z0-9_-]{10,})/);
-    expect(idMatch).toBeTruthy();
-    createdTaskId = idMatch![1];
-    expect(createdTaskId).toBeTruthy();
-  });
-
-  it("polpo task list — shows the created task", async () => {
-    const r = await run(["task", "list", "-d", tmpDir]);
-    expect(r.exitCode).toBe(0);
-    const out = r.stdout + r.stderr;
-    expect(out).toContain("CLI integration test task");
-    expect(out).toContain("agent-1");
-  });
-
-  it("polpo task show <id> — displays task details", async () => {
-    // Ensure we have a valid task ID from the add test
-    if (!createdTaskId) {
-      // Create one inline if the previous test didn't set it
-      const add = await run(["task", "add", "--no-prep", "-d", tmpDir, "-a", "agent-1", "show test task"]);
-      const m = (add.stdout + add.stderr).match(/ID:\s*(\S+)/);
-      createdTaskId = m?.[1] ?? "";
-    }
-    expect(createdTaskId).toBeTruthy();
-    const r = await run(["task", "show", createdTaskId, "-d", tmpDir]);
-    expect(r.exitCode).toBe(0);
-    const out = r.stdout + r.stderr;
-    expect(out).toContain("Status:");
-  });
-
-  it("polpo task show <bogus> — fails for unknown task", async () => {
-    const r = await run(["task", "show", "nonexistent-id-12345", "-d", tmpDir]);
-    expect(r.exitCode).not.toBe(0);
-    const out = r.stdout + r.stderr;
-    expect(out).toContain("Task not found");
-  });
-
-  it("polpo task add — error when agent not found", async () => {
-    const r = await run([
-      "task", "add", "--no-prep", "-d", tmpDir, "-a", "ghost-agent",
-      "Should fail",
-    ]);
-    expect(r.exitCode).not.toBe(0);
-    const out = r.stdout + r.stderr;
-    expect(out).toContain("Agent not found");
-  });
-
-  it("polpo task delete <id> — removes the task", { timeout: 30_000 }, async () => {
-    // Create a fresh task to delete (independent of previous tests)
-    const add = await run(["task", "add", "--no-prep", "-d", tmpDir, "-a", "agent-1", "delete me"]);
-    expect(add.exitCode).toBe(0);
-    const addOut = add.stdout + add.stderr;
-    expect(addOut).toContain("Task created");
-
-    // Extract task ID — try the "ID: <id>" format, fall back to any word after "ID:"
-    const m = addOut.match(/ID:\s*([a-zA-Z0-9_-]{10,})/) ?? addOut.match(/ID:\s*(\S+)/);
-    expect(m).toBeTruthy();
-    const deleteId = m![1];
-    expect(deleteId).toBeTruthy();
-
-    const r = await run(["task", "delete", deleteId, "-d", tmpDir]);
-    expect(r.exitCode).toBe(0);
-    const out = r.stdout + r.stderr;
-    expect(out).toContain("deleted");
-
-    // Verify the deleted task is gone
-    const listR = await run(["task", "list", "-d", tmpDir]);
-    expect(listR.stdout + listR.stderr).not.toContain("delete me");
-  });
-
-  it("polpo task list --status done — filters (no done tasks)", async () => {
-    const r = await run(["task", "list", "-d", tmpDir, "--status", "done"]);
-    expect(r.exitCode).toBe(0);
-    const out = r.stdout + r.stderr;
-    expect(out).toContain("No tasks");
-  });
-
   // ── Status ─────────────────────────────────────────────────────────
 
   it("polpo status — exits gracefully", async () => {
     const r = await run(["status", "-d", tmpDir]);
-    // status exits 0 whether there are tasks or not
     expect(r.exitCode).toBe(0);
-    // Should produce some output (logo, status, or "No tasks")
     const out = r.stdout + r.stderr;
     expect(out.length).toBeGreaterThan(0);
-  });
-
-  // ── Memory ─────────────────────────────────────────────────────────
-
-  it("polpo memory show — empty initially", async () => {
-    const r = await run(["memory", "show", "-d", tmpDir]);
-    expect(r.exitCode).toBe(0);
-    const out = r.stdout + r.stderr;
-    expect(out).toContain("No shared memory");
-  });
-
-  it("polpo memory set — saves memory content", async () => {
-    const r = await run(["memory", "set", "-d", tmpDir, "Architecture", "decisions", "from", "CLI"]);
-    expect(r.exitCode).toBe(0);
-    const out = r.stdout + r.stderr;
-    expect(out).toContain("Shared memory saved");
-  });
-
-  it("polpo memory show — displays saved memory", async () => {
-    const r = await run(["memory", "show", "-d", tmpDir]);
-    expect(r.exitCode).toBe(0);
-    expect(r.stdout).toContain("Architecture decisions from CLI");
-  });
-
-  it("polpo memory append — adds to existing memory", async () => {
-    const r = await run(["memory", "append", "-d", tmpDir, "New insight appended"]);
-    expect(r.exitCode).toBe(0);
-    const out = r.stdout + r.stderr;
-    expect(out).toContain("Shared memory updated");
-  });
-
-  it("polpo memory show — shows both original and appended content", async () => {
-    const r = await run(["memory", "show", "-d", tmpDir]);
-    expect(r.exitCode).toBe(0);
-    expect(r.stdout).toContain("Architecture decisions from CLI");
-    expect(r.stdout).toContain("New insight appended");
-  });
-
-  // ── Team ───────────────────────────────────────────────────────────
-
-  it("polpo team list — shows initial agents", async () => {
-    const r = await run(["team", "list", "-d", tmpDir]);
-    expect(r.exitCode).toBe(0);
-    const out = r.stdout + r.stderr;
-    expect(out).toContain("test-team");
-    expect(out).toContain("agent-1");
-  });
-
-  // ── Config ─────────────────────────────────────────────────────────
-
-  it("polpo config show — displays project config", async () => {
-    const r = await run(["config", "show", "-d", tmpDir]);
-    expect(r.exitCode).toBe(0);
-    expect(r.stdout).toContain("cli-integration");
-  });
-
-  it("polpo config validate — succeeds with valid config", async () => {
-    const r = await run(["config", "validate", "-d", tmpDir]);
-    // Should indicate success (exit 0 or contain valid/ok)
-    const out = (r.stdout + r.stderr).toLowerCase();
-    expect(out).toMatch(/valid|ok|✓/);
-  });
-
-  // ── Logs ───────────────────────────────────────────────────────────
-
-  it("polpo logs list — shows sessions or empty message", async () => {
-    const r = await run(["logs", "list", "-d", tmpDir]);
-    expect(r.exitCode).toBe(0);
-    const out = r.stdout + r.stderr;
-    // Should produce some output (session rows or "No sessions")
-    expect(out.length).toBeGreaterThan(0);
-  });
-
-  // ── Schedule ───────────────────────────────────────────────────────
-
-  it("polpo schedule list — shows empty or unavailable", async () => {
-    const r = await run(["schedule", "list", "-d", tmpDir]);
-    expect(r.exitCode).toBe(0);
-    const out = (r.stdout + r.stderr).toLowerCase();
-    expect(out).toMatch(/no schedules|scheduler/i);
   });
 });
