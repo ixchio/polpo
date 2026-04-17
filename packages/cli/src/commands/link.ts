@@ -85,6 +85,18 @@ export function registerLinkCommand(program: Command): void {
 
       const cwd = path.resolve(opts.dir);
 
+      // Confirm target directory in interactive mode
+      if (!opts.yes && !!process.stdin.isTTY) {
+        const ok = await clack.confirm({
+          message: `Link project to ${pc.bold(cwd)}?`,
+          initialValue: true,
+        });
+        if (clack.isCancel(ok) || !ok) {
+          clack.cancel("Cancelled.");
+          process.exit(0);
+        }
+      }
+
       // Warn if already linked to a different project.
       const existing = readPolpoConfig(cwd);
       if (existing?.projectId && existing.projectId !== project.id) {
