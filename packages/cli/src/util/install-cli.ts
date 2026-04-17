@@ -15,11 +15,30 @@ const execAsync = promisify(exec);
 
 export const CLI_PACKAGE = "@polpo-ai/cli";
 
-/** `true` when the `polpo` bin is already on PATH globally. */
+/**
+ * `true` when the `polpo` bin is already on PATH *globally* — i.e. not
+ * via an npx temp dir.
+ *
+ * When the wizard runs via `npx @polpo-ai/cli create`, npx injects a
+ * temporary bin directory into PATH for the lifetime of the invocation.
+ * `which polpo` then finds *our own* bin (the npx cache copy), which
+ * would falsely report "already installed" and skip the global install
+ * step. We filter out npx cache paths (they typically live under
+ * `_npx` inside the npm cache) to avoid that trap.
+ */
 export function isPolpoOnPath(): boolean {
   try {
     const cmd = process.platform === "win32" ? "where polpo" : "which polpo";
-    execSync(cmd, { stdio: "ignore" });
+    const out = execSync(cmd, { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim()
+      .split("\n")[0] ?? "";
+    if (!out) return false;
+    // `_npx/` is npm's temp cache path for npx invocations. pnpm uses
+    // `dlx-` folders. If the resolved bin lives under either, treat it
+    // as not-on-path-globally.
+    if (out.includes("/_npx/") || out.includes("\\_npx\\")) return false;
+    if (out.includes("/dlx-") || out.includes("\\dlx-")) return false;
     return true;
   } catch {
     return false;
