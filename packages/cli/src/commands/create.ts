@@ -392,17 +392,31 @@ export function registerCreateCommand(program: Command): void {
 
       // Step 12: Deploy .polpo/ to cloud
       // Scaffolded agents live on disk but need to be pushed so the
-      // project's sandbox/data-plane can actually see them. We run deploy
-      // in-process by re-entering commander with the right argv.
+      // project's sandbox/data-plane can actually see them. We call the
+      // shared runDeploy() directly — same code path as `polpo deploy`,
+      // but without its own intro/outro/process.exit (we're inside the
+      // create wizard, still framing the UI).
       let deployOk = false;
       try {
         s.start("Deploying agents to cloud...");
-        await program.parseAsync([
-          process.argv[0], process.argv[1],
-          "deploy", "-d", targetDir, "--yes", "--force",
-        ]);
-        s.stop("Deployed");
-        deployOk = true;
+        const { runDeploy } = await import("./cloud/deploy.js");
+        const report = await runDeploy({
+          dir: targetDir,
+          yes: true,
+          force: true,
+          silent: true,
+        });
+        if (report.nothingToDeploy) {
+          s.stop("Nothing to deploy.");
+        } else if (report.total.failed > 0) {
+          s.stop(`Deploy completed with ${report.total.failed} failures.`);
+        } else {
+          const parts: string[] = [];
+          if (report.total.created > 0) parts.push(`${report.total.created} created`);
+          if (report.total.updated > 0) parts.push(`${report.total.updated} updated`);
+          s.stop(parts.length ? `Deployed (${parts.join(", ")})` : "Deployed");
+          deployOk = true;
+        }
       } catch (err) {
         s.stop("Deploy failed — you can retry manually.");
         clack.log.warn(`Deploy error: ${(err as Error).message}`);

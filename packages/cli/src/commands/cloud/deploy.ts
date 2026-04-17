@@ -548,62 +548,66 @@ async function deploySessions(client: ApiClient, polpoDir: string): Promise<Depl
   return result;
 }
 
-// ── Main command ──────────────────────────────────────
+// ── Reusable deploy runner ──────────────────────────────
+//
+// Extracted so both the `polpo deploy` command and `polpo create`
+// (auto-deploy after scaffold) can share the same logic. This function
+// does NOT call clack.intro/outro or process.exit — callers own the
+// framing UI. It throws on fatal errors (no project resolved, etc.).
 
-export function registerDeployCommand(program: Command): void {
-  program
-    .command("deploy")
-    .description("Deploy local .polpo/ project to cloud")
-    .option("-d, --dir <path>", "Project directory", ".")
-    .option("-y, --yes", "Skip all confirmation prompts")
-    .option("-f, --force", "Force override existing resources without asking")
-    .option("--include-tasks", "Also deploy tasks")
-    .option("--include-sessions", "Also deploy chat sessions")
-    .option("--all", "Deploy everything (full local→cloud migration)")
-    .action(async (opts) => {
-      clack.intro(pc.bold("Polpo — Deploy"));
+export interface DeployOptions {
+  dir: string;
+  yes?: boolean;
+  force?: boolean;
+  includeTasks?: boolean;
+  includeSessions?: boolean;
+  all?: boolean;
+  /** Suppress the "Push LLM keys?" prompt + resource summary + confirmation. */
+  silent?: boolean;
+}
 
-      const creds = await requireAuth({
-        context: "Deploying requires an authenticated session.",
-      });
+export interface DeployReport {
+  total: DeployResult;
+  endpoint?: string;
+  projectName: string;
+  nothingToDeploy?: boolean;
+}
 
-      const polpoDir = resolvePolpoDir(opts.dir);
-      const polpoConfig = loadJson(path.join(polpoDir, "polpo.json"));
-      const projectName = polpoConfig?.project ?? path.basename(path.resolve(opts.dir));
-      const force = opts.force || opts.yes || false;
-      const interactive = !force && isTTY();
+export async function runDeploy(opts: DeployOptions): Promise<DeployReport> {
+  const creds = await requireAuth({
+    context: "Deploying requires an authenticated session.",
+  });
 
-      const cpClient = createApiClient(creds);
-      const s = clack.spinner();
+  const polpoDir = resolvePolpoDir(opts.dir);
+  const polpoConfig = loadJson(path.join(polpoDir, "polpo.json"));
+  const projectName = polpoConfig?.project ?? path.basename(path.resolve(opts.dir));
+  const force = opts.force || opts.yes || false;
+  const interactive = !opts.silent && !force && isTTY();
 
-      // ── Step 1: Resolve project ────────────────────────
-      let projectId: string | undefined = polpoConfig?.projectId;
-      let projectSlug: string | undefined = polpoConfig?.projectSlug;
+  const cpClient = createApiClient(creds);
+  const s = clack.spinner();
 
-      if (!projectId) {
-        try {
-          const org = await pickOrg(cpClient);
-          const project = await resolveOrCreateProject({
-            client: cpClient,
-            orgId: org.id,
-            name: projectName,
-            force,
-            interactive: isTTY(),
-          });
-          projectId = project.id;
-          projectSlug = project.slug;
-          clack.log.success(`Project: ${pc.bold(project.name)}`);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          clack.outro(pc.red(friendlyError(msg)));
-          process.exit(1);
-        }
-      }
+  // ── Step 1: Resolve project ────────────────────────
+  let projectId: string | undefined = polpoConfig?.projectId;
+  let projectSlug: string | undefined = polpoConfig?.projectSlug;
 
-      if (!projectId) {
-        clack.outro(pc.red("No project resolved. Deploy from a directory with .polpo/polpo.json"));
-        process.exit(1);
-      }
+  if (!projectId) {
+    const org = await pickOrg(cpClient);
+    const project = await resolveOrCreateProject({
+      client: cpClient,
+      orgId: org.id,
+      name: projectName,
+      force,
+      interactive: isTTY(),
+    });
+    projectId = project.id;
+    projectSlug = project.slug;
+    if (!opts.silent) clack.log.success(`Project: ${pc.bold(project.name)}`);
+  }
+
+  if (!projectId) {
+    throw new Error("No project resolved. Deploy from a directory with .polpo/polpo.json");
+  }
 
       // Backfill `projectSlug` for users with legacy polpo.json (id only).
       if (!projectSlug && projectId) {
@@ -662,7 +666,7 @@ export function registerDeployCommand(program: Command): void {
         }
       }
 
-      if (detected.length > 0) {
+      if (detected.length > 0 && !opts.silent) {
         clack.log.info(
           `Detected LLM keys:\n` +
           detected.map(({ envVar, value }) =>
@@ -751,11 +755,12 @@ export function registerDeployCommand(program: Command): void {
       if (includeSessions && hasSessions) resourceLines.push(`  ${pc.bold("Sessions")}     yes`);
 
       if (resourceLines.length === 0) {
-        clack.outro(pc.yellow("Nothing to deploy — .polpo/ has no resources."));
-        process.exit(0);
+        return { total: emptyResult(), projectName, nothingToDeploy: true };
       }
 
-      clack.log.info(`Resources to deploy:\n${resourceLines.join("\n")}`);
+      if (!opts.silent) {
+        clack.log.info(`Resources to deploy:\n${resourceLines.join("\n")}`);
+      }
 
       if (interactive) {
         const ok = await clack.confirm({
@@ -763,8 +768,7 @@ export function registerDeployCommand(program: Command): void {
           initialValue: true,
         });
         if (clack.isCancel(ok) || !ok) {
-          clack.outro(pc.dim("Deploy cancelled."));
-          process.exit(0);
+          throw new Error("cancelled");
         }
       }
 
@@ -850,20 +854,64 @@ export function registerDeployCommand(program: Command): void {
       }
 
       // ── Summary ────────────────────────
-      if (total.errors.length > 0) {
+      if (total.errors.length > 0 && !opts.silent) {
         clack.log.warn(
           `Errors:\n` +
           total.errors.map(e => `  ${pc.red("x")} ${e}`).join("\n"),
         );
       }
 
+      const endpoint = projectSlug ? `https://${projectSlug}.polpo.cloud` : undefined;
+      return { total, endpoint, projectName };
+}
+
+// ── Main command ──────────────────────────────────────
+
+export function registerDeployCommand(program: Command): void {
+  program
+    .command("deploy")
+    .description("Deploy local .polpo/ project to cloud")
+    .option("-d, --dir <path>", "Project directory", ".")
+    .option("-y, --yes", "Skip all confirmation prompts")
+    .option("-f, --force", "Force override existing resources without asking")
+    .option("--include-tasks", "Also deploy tasks")
+    .option("--include-sessions", "Also deploy chat sessions")
+    .option("--all", "Deploy everything (full local→cloud migration)")
+    .action(async (opts) => {
+      clack.intro(pc.bold("Polpo — Deploy"));
+
+      let report: DeployReport;
+      try {
+        report = await runDeploy({
+          dir: opts.dir,
+          yes: opts.yes,
+          force: opts.force,
+          includeTasks: opts.includeTasks,
+          includeSessions: opts.includeSessions,
+          all: opts.all,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg === "cancelled") {
+          clack.outro(pc.dim("Deploy cancelled."));
+          process.exit(0);
+        }
+        clack.outro(pc.red(friendlyError(msg)));
+        process.exit(1);
+      }
+
+      if (report.nothingToDeploy) {
+        clack.outro(pc.yellow("Nothing to deploy — .polpo/ has no resources."));
+        process.exit(0);
+      }
+
+      const { total, endpoint } = report;
       const summaryParts: string[] = [];
       if (total.created > 0) summaryParts.push(`${total.created} created`);
       if (total.updated > 0) summaryParts.push(`${total.updated} updated`);
       if (total.skipped > 0) summaryParts.push(`${total.skipped} skipped`);
       if (total.failed > 0) summaryParts.push(pc.red(`${total.failed} failed`));
 
-      const endpoint = projectSlug ? `https://${projectSlug}.polpo.cloud` : "";
       const outroLines: string[] = [];
       if (total.failed === 0) {
         outroLines.push(pc.green(`✓ Deployed: ${summaryParts.join(", ")}`));
