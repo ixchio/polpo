@@ -262,7 +262,14 @@ export class PolpoClient {
     } else {
       try {
         const hostname = new URL(this.baseUrl).hostname;
-        this.apiPrefix = hostname.endsWith(".polpo.sh") || hostname === "polpo.sh" ? "/v1" : "/api/v1";
+        // Cloud domains (polpo.sh, polpo.cloud) mount the API at /v1.
+        // Self-hosted / OSS Polpo server mounts at /api/v1.
+        const isCloud =
+          hostname.endsWith(".polpo.sh") ||
+          hostname === "polpo.sh" ||
+          hostname.endsWith(".polpo.cloud") ||
+          hostname === "polpo.cloud";
+        this.apiPrefix = isCloud ? "/v1" : "/api/v1";
       } catch {
         this.apiPrefix = "/api/v1";
       }
