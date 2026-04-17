@@ -106,7 +106,7 @@ describe("isPolpoOnPath", () => {
     Object.defineProperty(process, "platform", { value: "linux" });
     execSyncMock.mockReturnValue(Buffer.from("/usr/local/bin/polpo\n"));
     expect(isPolpoOnPath()).toBe(true);
-    expect(execSyncMock).toHaveBeenCalledWith("which polpo", expect.objectContaining({ stdio: "ignore" }));
+    expect(execSyncMock).toHaveBeenCalledWith("which polpo", expect.any(Object));
   });
 
   it("returns false when `which polpo` throws", () => {
@@ -122,6 +122,28 @@ describe("isPolpoOnPath", () => {
     execSyncMock.mockReturnValue(Buffer.from("C:\\...\\polpo.exe\n"));
     expect(isPolpoOnPath()).toBe(true);
     expect(execSyncMock).toHaveBeenCalledWith("where polpo", expect.any(Object));
+  });
+
+  it("returns false when bin resolves inside npm _npx cache", () => {
+    Object.defineProperty(process, "platform", { value: "linux" });
+    execSyncMock.mockReturnValue(
+      Buffer.from("/home/user/.npm/_npx/abc123/node_modules/.bin/polpo\n"),
+    );
+    expect(isPolpoOnPath()).toBe(false);
+  });
+
+  it("returns false when bin resolves inside pnpm dlx cache", () => {
+    Object.defineProperty(process, "platform", { value: "linux" });
+    execSyncMock.mockReturnValue(
+      Buffer.from("/home/user/.local/share/pnpm/dlx-abc123/node_modules/.bin/polpo\n"),
+    );
+    expect(isPolpoOnPath()).toBe(false);
+  });
+
+  it("returns false when stdout is empty", () => {
+    Object.defineProperty(process, "platform", { value: "linux" });
+    execSyncMock.mockReturnValue(Buffer.from(""));
+    expect(isPolpoOnPath()).toBe(false);
   });
 });
 
