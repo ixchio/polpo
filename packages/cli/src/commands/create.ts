@@ -298,22 +298,22 @@ export function registerCreateCommand(program: Command): void {
       if (apiKey) {
         const envLocal = path.join(targetDir, ".env.local");
 
-        // Framework-aware env var prefix. Next.js needs NEXT_PUBLIC_* for
-        // client-side access; Vite needs VITE_*; backend templates use
-        // unprefixed POLPO_*. Without the right prefix the scaffolded app
-        // starts with empty credentials and auth fails on first request.
-        const prefix =
-          template.id === "chat" || template.id === "multi-agent" ? "NEXT_PUBLIC_"
-          : template.id === "chat-widget" ? "VITE_"
-          : "";
+        // Framework-aware env var prefix. The remote templates are all
+        // Next.js apps (chat, multi-agent, chat-widget) and read
+        // `NEXT_PUBLIC_POLPO_URL` / `NEXT_PUBLIC_POLPO_API_KEY`.
+        // The blank template is backend-only and uses unprefixed vars.
+        // Variable names must match what the template reads verbatim —
+        // a mismatch means the template falls back to its hardcoded
+        // default (usually `api.polpo.sh`) and auth fails.
+        const prefix = template.kind === "remote" ? "NEXT_PUBLIC_" : "";
 
         const envContent =
           `${prefix}POLPO_API_KEY=${apiKey.rawKey}\n` +
-          `${prefix}POLPO_API_URL=${tenantUrl}\n`;
+          `${prefix}POLPO_URL=${tenantUrl}\n`;
 
         // Overwrite: remote templates (via create-polpo-app) write an
-        // incomplete .env.local with just the key placeholder. We need to
-        // replace it with the full, correct credentials.
+        // incomplete .env.local with just the key placeholder. We need
+        // to replace it with the full, correct credentials.
         try {
           fs.writeFileSync(envLocal, envContent, { flag: "w" });
           clack.log.info(`Wrote ${pc.bold(".env.local")} with project credentials`);
