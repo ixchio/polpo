@@ -97,7 +97,13 @@ export async function runInteractiveMenu(program: Command): Promise<void> {
 
   // Dispatch to the real subcommand. Commander consumes argv shape
   // ['node', 'polpo', '<cmd>', ...args], so we rebuild that here.
-  await program.parseAsync([process.argv[0], process.argv[1], choice]);
+  // Some menu entries need a subcommand (e.g. "projects list") since
+  // running `polpo projects` bare just prints the nested help.
+  const subcommands: Record<string, string[]> = {
+    projects: ["projects", "list"],
+  };
+  const argv = subcommands[choice] ?? [choice];
+  await program.parseAsync([process.argv[0], process.argv[1], ...argv]);
 }
 
 /**
