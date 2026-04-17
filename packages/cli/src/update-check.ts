@@ -15,7 +15,8 @@ import * as clack from "@clack/prompts";
 import pc from "picocolors";
 import { runSelfUpdate } from "./util/self-update.js";
 
-const PACKAGE_NAME = "polpo-ai";
+const PACKAGE_NAME = "@polpo-ai/cli";
+const REGISTRY_PATH = PACKAGE_NAME.replace("/", "%2F");
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /** File where we store the last check timestamp + latest version. */
@@ -89,7 +90,7 @@ export function startUpdateCheck(currentVersion: string): () => void {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
 
-  fetch(`https://registry.npmjs.org/${PACKAGE_NAME}/latest`, {
+  fetch(`https://registry.npmjs.org/${REGISTRY_PATH}/latest`, {
     signal: controller.signal,
     headers: { Accept: "application/json" },
   })

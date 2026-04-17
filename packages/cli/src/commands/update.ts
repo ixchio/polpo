@@ -93,7 +93,7 @@ export function registerUpdateCommand(program: Command): void {
         clack.outro(pc.green("Update complete."));
       } catch (err: any) {
         clack.log.error(`Update failed: ${err.message}`);
-        clack.log.info(`Try manually: ${pc.bold("npm install -g polpo-ai@latest")}`);
+        clack.log.info(`Try manually: ${pc.bold("npm install -g @polpo-ai/cli@latest")}`);
         clack.outro(pc.red("Update failed."));
         process.exit(1);
       }

@@ -8,7 +8,7 @@
  */
 import { execSync } from "node:child_process";
 
-export const PACKAGE_NAME = "polpo-ai";
+export const PACKAGE_NAME = "@polpo-ai/cli";
 
 /**
  * Detect which package manager installed polpo globally. Falls back to
@@ -16,11 +16,11 @@ export const PACKAGE_NAME = "polpo-ai";
  */
 export function detectPackageManager(): "pnpm" | "npm" {
   try {
-    const out = execSync("pnpm list -g polpo-ai --depth=0 2>/dev/null", {
+    const out = execSync(`pnpm list -g ${PACKAGE_NAME} --depth=0 2>/dev/null`, {
       encoding: "utf-8",
       timeout: 10_000,
     });
-    if (out.includes("polpo-ai")) return "pnpm";
+    if (out.includes(PACKAGE_NAME)) return "pnpm";
   } catch {
     // pnpm absent or listing failed — fall through.
   }
@@ -31,7 +31,9 @@ export function detectPackageManager(): "pnpm" | "npm" {
  * Fetch the latest published version from the npm registry.
  */
 export async function getLatestVersion(): Promise<string> {
-  const res = await fetch(`https://registry.npmjs.org/${PACKAGE_NAME}/latest`, {
+  // npm registry needs scoped names URL-encoded ("@polpo-ai/cli" → "@polpo-ai%2Fcli")
+  const encoded = PACKAGE_NAME.replace("/", "%2F");
+  const res = await fetch(`https://registry.npmjs.org/${encoded}/latest`, {
     headers: { Accept: "application/json" },
   });
   if (!res.ok) throw new Error(`Registry returned ${res.status}`);
@@ -40,7 +42,7 @@ export async function getLatestVersion(): Promise<string> {
 }
 
 /**
- * Install `polpo-ai@{version}` globally via the detected package manager.
+ * Install `@polpo-ai/cli@{version}` globally via the detected package manager.
  * Returns `{ success: true, cmd }` on success, `{ success: false, cmd, error }`
  * on failure. Never throws — callers typically want to warn + continue.
  */
@@ -52,8 +54,8 @@ export function runSelfUpdate(version: string): {
   const pm = detectPackageManager();
   const cmd =
     pm === "pnpm"
-      ? `pnpm add -g polpo-ai@${version}`
-      : `npm install -g polpo-ai@${version}`;
+      ? `pnpm add -g ${PACKAGE_NAME}@${version}`
+      : `npm install -g ${PACKAGE_NAME}@${version}`;
 
   if (pm === "npm") {
     try {
