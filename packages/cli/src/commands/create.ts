@@ -297,16 +297,29 @@ export function registerCreateCommand(program: Command): void {
 
       if (apiKey) {
         const envLocal = path.join(targetDir, ".env.local");
+
+        // Framework-aware env var prefix. Next.js needs NEXT_PUBLIC_* for
+        // client-side access; Vite needs VITE_*; backend templates use
+        // unprefixed POLPO_*. Without the right prefix the scaffolded app
+        // starts with empty credentials and auth fails on first request.
+        const prefix =
+          template.id === "chat" || template.id === "multi-agent" ? "NEXT_PUBLIC_"
+          : template.id === "chat-widget" ? "VITE_"
+          : "";
+
         const envContent =
-          `POLPO_API_KEY=${apiKey.rawKey}\n` +
-          `POLPO_API_URL=${tenantUrl}\n`;
+          `${prefix}POLPO_API_KEY=${apiKey.rawKey}\n` +
+          `${prefix}POLPO_API_URL=${tenantUrl}\n`;
+
+        // Overwrite: remote templates (via create-polpo-app) write an
+        // incomplete .env.local with just the key placeholder. We need to
+        // replace it with the full, correct credentials.
         try {
-          fs.writeFileSync(envLocal, envContent, { flag: "wx" });
+          fs.writeFileSync(envLocal, envContent, { flag: "w" });
           clack.log.info(`Wrote ${pc.bold(".env.local")} with project credentials`);
-        } catch {
-          // .env.local exists already — leave it alone, just log the key once.
-          clack.log.warn(".env.local exists — not overwriting. Your key:");
-          console.log(pc.bold(`    POLPO_API_KEY=${apiKey.rawKey}`));
+        } catch (err) {
+          clack.log.warn(`Could not write .env.local: ${(err as Error).message}`);
+          console.log(pc.bold(`    ${prefix}POLPO_API_KEY=${apiKey.rawKey}`));
         }
       }
 
