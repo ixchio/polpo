@@ -38,7 +38,7 @@ import { friendlyError } from "../util/errors.js";
 import { slugify } from "../util/slugify.js";
 import { installCodingAgentSkills, skillsInstallHint, type SkillsScope } from "../util/skills.js";
 import { promptForUpdateIfAvailable } from "../update-check.js";
-import { isPolpoOnPath, installPolpoGlobally, globalInstallHint } from "../util/install-cli.js";
+import { isPolpoOnPath, installPolpoGlobally, globalInstallHint, detectPackageManager } from "../util/install-cli.js";
 import { POLPO_API_DOMAIN } from "../util/base-url.js";
 
 interface CreateOptions {
@@ -390,6 +390,33 @@ export function registerCreateCommand(program: Command): void {
         cliInstalled = true; // already on PATH
       }
 
+      // Step 12: Deploy .polpo/ to cloud
+      // Scaffolded agents live on disk but need to be pushed so the
+      // project's sandbox/data-plane can actually see them. We run deploy
+      // in-process by re-entering commander with the right argv.
+      let deployOk = false;
+      try {
+        s.start("Deploying agents to cloud...");
+        await program.parseAsync([
+          process.argv[0], process.argv[1],
+          "deploy", "-d", targetDir, "--yes", "--force",
+        ]);
+        s.stop("Deployed");
+        deployOk = true;
+      } catch (err) {
+        s.stop("Deploy failed — you can retry manually.");
+        clack.log.warn(`Deploy error: ${(err as Error).message}`);
+      }
+
+      // Detect the package manager the remote template used so we can
+      // suggest the right `<pm> run dev` in the outro.
+      const pm = detectPackageManager();
+      const devCmd =
+        pm === "bun" ? "bun dev"
+        : pm === "pnpm" ? "pnpm dev"
+        : pm === "yarn" ? "yarn dev"
+        : "npm run dev";
+
       // Outro
       const relDir = dirName ?? ".";
       const polpoRun = cliInstalled ? "polpo" : `npx ${CLI_PACKAGE_FOR_OUTRO}`;
@@ -397,29 +424,44 @@ export function registerCreateCommand(program: Command): void {
 
       const lines: string[] = [];
       lines.push(pc.green(`✓ Project "${project.name}" ready in ${relDir}`));
+      if (deployOk) {
+        lines.push(pc.dim("  Agents deployed. Your project is live."));
+      }
       lines.push("");
 
-      // Section 1: Navigate
-      if (cdLine) {
-        lines.push(pc.dim("  Navigate:"));
-        lines.push(`    ${pc.bold(cdLine)}`);
+      // Section 1: Navigate + run
+      if (template.installsDeps) {
+        // Remote template — Next.js / Vite app. Tell the user how to start it.
+        lines.push(pc.dim("  Start the app:"));
+        if (cdLine) lines.push(`    ${pc.bold(cdLine)}`);
+        lines.push(`    ${pc.bold(devCmd)}`);
+        lines.push("");
+      } else {
+        // Blank template — no frontend. Tell them how to talk to the agent.
+        if (cdLine) {
+          lines.push(pc.dim("  Navigate:"));
+          lines.push(`    ${pc.bold(cdLine)}`);
+          lines.push("");
+        }
+        lines.push(pc.dim("  Talk to your agent:"));
+        lines.push(`    ${pc.bold(`curl $POLPO_API_URL/v1/chat/completions \\`)}`);
+        lines.push(`      ${pc.bold(`-H "Authorization: Bearer $POLPO_API_KEY" \\`)}`);
+        lines.push(`      ${pc.bold(`-d '{"agent":"agent-1","messages":[{"role":"user","content":"Hello"}]}'`)}`);
         lines.push("");
       }
 
-      // Section 2: Configure agents
-      lines.push(pc.dim("  Configure your agents:"));
-      lines.push(`    ${pc.dim("Edit")} ${pc.bold(".polpo/agents.json")} ${pc.dim("to add agents, tools, and system prompts")}`);
+      // Section 2: Modify
+      lines.push(pc.dim("  Modify your agents:"));
+      lines.push(`    ${pc.dim("Edit")} ${pc.bold(".polpo/agents.json")} ${pc.dim("and run")} ${pc.bold(`${polpoRun} deploy`)}`);
       if (skillsInstalled) {
-        lines.push(`    ${pc.dim("Or ask your coding agent:")} ${pc.bold('"Set up Polpo agents for this project"')}`);
+        lines.push(`    ${pc.dim("Or ask your coding agent:")} ${pc.bold('"Modify my Polpo agents"')}`);
       }
       lines.push("");
 
-      // Section 3: Deploy
-      lines.push(pc.dim("  Deploy to cloud:"));
-      lines.push(`    ${pc.bold(`${polpoRun} deploy`)}`);
-      lines.push("");
-
-      // Section 4: Fallbacks
+      // Section 3: Fallbacks
+      if (!deployOk) {
+        lines.push(pc.dim(`  Deploy now: ${pc.bold(`${polpoRun} deploy`)}`));
+      }
       if (skillsScope === "skip") {
         lines.push(pc.dim(`  Install coding-agent skills later: ${pc.bold(skillsInstallHint())}`));
       }
