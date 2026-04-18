@@ -284,7 +284,7 @@ export function registerCreateCommand(program: Command): void {
       // Step 9: Write polpo.json + .env.local
       // The data plane URL is derived from the slug — `{slug}.polpo.cloud`.
       // For self-hosted or custom-domain users, set `apiUrl` in polpo.json
-      // (or the POLPO_API_URL env var at runtime) to override.
+      // (or the POLPO_URL env var at runtime) to override.
       const tenantUrl = project.slug
         ? `https://${project.slug}.${POLPO_API_DOMAIN}`
         : creds.baseUrl;
@@ -298,18 +298,16 @@ export function registerCreateCommand(program: Command): void {
       if (apiKey) {
         const envLocal = path.join(targetDir, ".env.local");
 
-        // Framework-aware env var prefix. The remote templates are all
-        // Next.js apps (chat, multi-agent, chat-widget) and read
-        // `NEXT_PUBLIC_POLPO_URL` / `NEXT_PUBLIC_POLPO_API_KEY`.
-        // The blank template is backend-only and uses unprefixed vars.
-        // Variable names must match what the template reads verbatim —
-        // a mismatch means the template falls back to its hardcoded
-        // default (usually `api.polpo.sh`) and auth fails.
+        // Env var names — consistent across templates (Supabase pattern):
+        // - POLPO_URL (the project endpoint)
+        // - POLPO_API_KEY (the scoped key)
+        // Remote templates prefix with NEXT_PUBLIC_ so the Next.js app
+        // can read them client-side. Blank template stays unprefixed.
         const prefix = template.kind === "remote" ? "NEXT_PUBLIC_" : "";
+        const urlVar = `${prefix}POLPO_URL`;
+        const keyVar = `${prefix}POLPO_API_KEY`;
 
-        const envContent =
-          `${prefix}POLPO_API_KEY=${apiKey.rawKey}\n` +
-          `${prefix}POLPO_URL=${tenantUrl}\n`;
+        const envContent = `${keyVar}=${apiKey.rawKey}\n${urlVar}=${tenantUrl}\n`;
 
         // Overwrite: remote templates (via create-polpo-app) write an
         // incomplete .env.local with just the key placeholder. We need
@@ -319,7 +317,7 @@ export function registerCreateCommand(program: Command): void {
           clack.log.info(`Wrote ${pc.bold(".env.local")} with project credentials`);
         } catch (err) {
           clack.log.warn(`Could not write .env.local: ${(err as Error).message}`);
-          console.log(pc.bold(`    ${prefix}POLPO_API_KEY=${apiKey.rawKey}`));
+          console.log(pc.bold(`    ${keyVar}=${apiKey.rawKey}`));
         }
       }
 
@@ -451,15 +449,23 @@ export function registerCreateCommand(program: Command): void {
         lines.push(`    ${pc.bold(devCmd)}`);
         lines.push("");
       } else {
-        // Blank template — no frontend. Tell them how to talk to the agent.
+        // Blank template — no frontend. Give the user a two-step flow:
+        // 1) export both env vars into the current shell (so any subsequent
+        //    curl / SDK call just works without sourcing .env.local)
+        // 2) a sample curl that references the exported vars
         if (cdLine) {
           lines.push(pc.dim("  Navigate:"));
           lines.push(`    ${pc.bold(cdLine)}`);
           lines.push("");
         }
+        const keyValue = apiKey?.rawKey ?? "<your-api-key>";
+        lines.push(pc.dim("  Load credentials into your shell:"));
+        lines.push(`    ${pc.bold(`export POLPO_API_KEY=${keyValue} POLPO_URL=${tenantUrl}`)}`);
+        lines.push("");
         lines.push(pc.dim("  Talk to your agent:"));
-        lines.push(`    ${pc.bold(`curl $POLPO_API_URL/v1/chat/completions \\`)}`);
+        lines.push(`    ${pc.bold(`curl $POLPO_URL/v1/chat/completions \\`)}`);
         lines.push(`      ${pc.bold(`-H "Authorization: Bearer $POLPO_API_KEY" \\`)}`);
+        lines.push(`      ${pc.bold(`-H "Content-Type: application/json" \\`)}`);
         lines.push(`      ${pc.bold(`-d '{"agent":"agent-1","messages":[{"role":"user","content":"Hello"}]}'`)}`);
         lines.push("");
       }

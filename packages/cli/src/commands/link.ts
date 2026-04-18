@@ -159,7 +159,7 @@ export function registerLinkCommand(program: Command): void {
         const envLocal = path.join(cwd, ".env.local");
         const envContent =
           `POLPO_API_KEY=${apiKey.rawKey}\n` +
-          `POLPO_API_URL=${tenantUrl}\n`;
+          `POLPO_URL=${tenantUrl}\n`;
         try {
           fs.writeFileSync(envLocal, envContent, { flag: "wx" });
           clack.log.info(`Wrote ${pc.bold(".env.local")} with project credentials`);

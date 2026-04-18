@@ -5,8 +5,8 @@
  *
  *   1. Explicit `--url` flag passed to the command (caller's responsibility
  *      to surface it as the highest-priority override).
- *   2. `POLPO_API_URL` env var. Lets users redirect a single command run
- *      without touching files (e.g. `POLPO_API_URL=http://localhost:4000
+ *   2. `POLPO_URL` env var. Lets users redirect a single command run
+ *      without touching files (e.g. `POLPO_URL=http://localhost:4000
  *      polpo deploy` for self-hosted dev).
  *   3. `apiUrl` field in `.polpo/polpo.json`. Per-project pin — used by
  *      teams that want their `.env.local` and CLI to point somewhere
@@ -28,7 +28,7 @@
 export interface BaseUrlInputs {
   /** From `--url` flag. */
   flagOverride?: string;
-  /** Pre-read `POLPO_API_URL` env value. */
+  /** Pre-read `POLPO_URL` env value. */
   envOverride?: string;
   /** Pre-loaded `polpo.json` (or null when missing). */
   polpoConfig?: { apiUrl?: string; projectSlug?: string } | null;
